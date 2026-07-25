@@ -1,0 +1,53 @@
+Before wiring the router, I would make one small improvement.
+
+Right now your handler does:
+
+http.Error(
+    w,
+    err.Error(),
+    http.StatusBadRequest,
+)
+
+That is okay for a first test, but production APIs usually want structured errors:
+
+{
+    "error": "email already registered"
+}
+
+instead of plain text.
+
+So next after the handler, I would add:
+
+internal/
+├── users/
+│   ├── errors.go     <-- new
+│   ├── handler.go
+│   ├── service.go
+│   └── repository.go
+
+with errors like:
+
+var (
+	ErrUserNotFound = errors.New("user not found")
+	ErrEmailTaken   = errors.New("email already registered")
+)
+
+Then your HTTP layer can map:
+
+ErrEmailTaken
+      |
+      v
+409 Conflict
+
+ErrUserNotFound
+      |
+      v
+404 Not Found
+
+After that we wire it into cmd/api/main.go and you can actually hit:
+
+curl -X POST localhost:8080/auth/register \
+-H "Content-Type: application/json" \
+-d '{"email":"test@test.com","password":"password"}'
+
+and watch the full architecture run end-to-end.

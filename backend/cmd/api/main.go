@@ -1,20 +1,28 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/SipiczkiMartin/chat-app/internal/config"
+	"github.com/SipiczkiMartin/chat-app/internal/database"
+	"github.com/SipiczkiMartin/chat-app/internal/server"
 )
 
 func main() {
-	r := chi.NewRouter()
+	ctx := context.Background()
+	cfg := config.Load()
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
-	})
+	db, err := database.Connect(ctx, cfg.DatabaseURL())
+	if err != nil {
+		log.Fatal("database connection failed:", err)
+	}
 
-	log.Println("Server listening on :8080")
+	defer db.Close()
 
-	log.Fatal(http.ListenAndServe(":8080", r))
+	log.Println("Connected to Database!")
+
+	if err := server.Run(":"+cfg.Port, db); err != nil {
+		log.Fatal(err)
+	}
 }
