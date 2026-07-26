@@ -58,6 +58,51 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Email: user.Email,
 	}
 
-	w.Header().Set("Content-Type", "application-json")
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
+}
+
+//LOGIN
+
+type loginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type loginResponse struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	user, err := h.service.Login(
+		r.Context(),
+		LoginInput{
+			Email:    req.Email,
+			Password: req.Password,
+		},
+	)
+
+	if err != nil {
+		switch err {
+		case ErrInvalidCredentials:
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		default:
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(loginResponse{
+		ID:    user.ID.String(),
+		Email: user.Email,
+	})
 }

@@ -23,6 +23,6 @@ func NewRouter(pool *pgxpool.Pool) *chi.Mux {
 	})
 
 	r.Post("/auth/register", userHandler.Register)
-
+	r.Post("/auth/login", userHandler.Login)
 	return r
 }
