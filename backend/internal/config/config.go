@@ -14,6 +14,8 @@ type Config struct {
 	DBPassword string
 	DBName     string
 	DBSSLMode  string
+
+	JWTSecret string
 }
 
 func Load() Config {
@@ -26,6 +28,8 @@ func Load() Config {
 		DBPassword: getEnv("DB_PASSWORD", "chatpassword"),
 		DBName:     getEnv("DB_NAME", "chatdb"),
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
+
+		JWTSecret: getEnv("JWT_SECRET", ""),
 	}
 }
 

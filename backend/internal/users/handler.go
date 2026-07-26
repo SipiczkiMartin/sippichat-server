@@ -3,14 +3,18 @@ package users
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/SipiczkiMartin/chat-app/internal/auth"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
-	service *Service
+	service   *Service
+	jwtSecret string
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, jwtSecret string) *Handler {
+	return &Handler{service: service, jwtSecret: jwtSecret}
 }
 
 type registerRequest struct {
@@ -70,8 +74,8 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -100,9 +104,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID := uuid.UUID(user.ID.Bytes)
+
+	token, err := auth.GenerateAccessToken(userID, h.jwtSecret)
+
+	if err != nil {
+		http.Error(w, "could not generate token", http.StatusInternalServerError)
+	}
+
+	response := loginResponse{
+		AccessToken: token,
+		ExpiresIn:   900,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(loginResponse{
-		ID:    user.ID.String(),
-		Email: user.Email,
-	})
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }

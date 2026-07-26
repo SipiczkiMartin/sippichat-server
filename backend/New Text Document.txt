@@ -1,53 +1,56 @@
-Before wiring the router, I would make one small improvement.
+Next step: JWT middleware
 
-Right now your handler does:
+Now we make the token useful.
 
-http.Error(
-    w,
-    err.Error(),
-    http.StatusBadRequest,
-)
+Currently the token is just being created. The server cannot yet say:
 
-That is okay for a first test, but production APIs usually want structured errors:
+"This request belongs to user X."
 
+We'll add:
+
+internal/auth/
+    jwt.go
+    middleware.go
+
+The middleware will:
+
+Read:
+Authorization: Bearer <token>
+Validate:
+signature
+expiry
+claims
+Put the user ID into the request context.
+
+Then handlers can do:
+
+userID := auth.UserIDFromContext(r.Context())
+
+After middleware, we'll create:
+
+GET /me
+
+Flow:
+
+curl
+ |
+ | Authorization: Bearer eyJ...
+ |
+ v
+JWT Middleware
+ |
+ v
+/me Handler
+ |
+ v
+Database lookup
+ |
+ v
 {
-    "error": "email already registered"
+  "id": "...",
+  "email": "test@test.com"
 }
 
-instead of plain text.
+That endpoint will be the first real proof that your authentication architecture works.
 
-So next after the handler, I would add:
-
-internal/
-├── users/
-│   ├── errors.go     <-- new
-│   ├── handler.go
-│   ├── service.go
-│   └── repository.go
-
-with errors like:
-
-var (
-	ErrUserNotFound = errors.New("user not found")
-	ErrEmailTaken   = errors.New("email already registered")
-)
-
-Then your HTTP layer can map:
-
-ErrEmailTaken
-      |
-      v
-409 Conflict
-
-ErrUserNotFound
-      |
-      v
-404 Not Found
-
-After that we wire it into cmd/api/main.go and you can actually hit:
-
-curl -X POST localhost:8080/auth/register \
--H "Content-Type: application/json" \
--d '{"email":"test@test.com","password":"password"}'
-
-and watch the full architecture run end-to-end.
+Before we write middleware, I want to make one small improvement to jwt.go: add a ParseAccessToken() function next to GenerateAccessToken(). Then the middleware will have a clean API instead of knowing JWT internals.

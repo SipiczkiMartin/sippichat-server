@@ -22,7 +22,7 @@ func main() {
 
 	log.Println("Connected to Database!")
 
-	if err := server.Run(":"+cfg.Port, db); err != nil {
+	if err := server.Run(":"+cfg.Port, db, cfg); err != nil {
 		log.Fatal(err)
 	}
 }
