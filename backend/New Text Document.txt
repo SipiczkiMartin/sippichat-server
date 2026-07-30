@@ -1,56 +1,289 @@
-Next step: JWT middleware
+You made a lot of progress today. The project moved from "conversation creation exists" to a much more realistic chat backend foundation.
 
-Now we make the token useful.
+🏗️ Conversations module improvements
+✅ Prevent duplicate direct conversations
 
-Currently the token is just being created. The server cannot yet say:
+Before:
 
-"This request belongs to user X."
+Martin → Alice
+
+POST /conversations
+
+↓
+
+Conversation A
+
+
+POST /conversations
+
+↓
+
+Conversation B
+
+A user could accidentally create multiple chats with the same person.
+
+Now:
+
+Martin → Alice
+
+POST /conversations
+
+↓
+
+Check existing direct conversation
+
+↓
+
+Found?
+
+Return existing conversation
+
+↓
+
+Not found?
+
+Create new one
+
+You added:
+
+GetDirectConversation
+
+and integrated it into the service layer.
+
+The flow is now:
+
+Handler
+
+↓
+
+Service
+
+↓
+
+Check existing conversation
+
+↓
+
+Create only if needed
+
+↓
+
+Repository
+
+↓
+
+PostgreSQL
+✅ Added self-conversation protection
+
+You also added the idea that:
+
+Martin → Martin
+
+should not be allowed.
+
+The service layer is the correct place for this validation because it is business logic, not HTTP logic.
+
+✅ Kept transactional conversation creation
+
+The creation flow remains atomic:
+
+BEGIN
+
+Create conversation
+
+↓
+
+Add creator
+
+↓
+
+Add member
+
+↓
+
+COMMIT
+
+If anything fails:
+
+ROLLBACK
+
+No half-created conversations.
+
+🗄️ Database work
+
+You added a new sqlc query:
+
+GetDirectConversation
+
+Generated code:
+
+func (q *Queries) GetDirectConversation(...)
+
+Then added:
+
+ListConversations
+
+Generated:
+
+func (q *Queries) ListConversations(
+    ctx context.Context,
+    userID pgtype.UUID,
+) ([]Conversation, error)
+
+So now your database layer supports:
+
+create conversations
+add members
+get by ID
+find existing direct chats
+list user's chats
+✅ Started GET /conversations
+
+You built the read side of conversations.
+
+New endpoint:
+
+GET /conversations
+
+The flow:
+
+JWT
+
+↓
+
+Extract user ID
+
+↓
+
+Service.ListConversations()
+
+↓
+
+Repository.ListConversations()
+
+↓
+
+sqlc
+
+↓
+
+PostgreSQL
+
+↓
+
+JSON response
+
+The query correctly filters by membership:
+
+WHERE cm.user_id = $1
+
+Meaning:
+
+Martin sees:
+
+Martin ↔ Alice
+Martin ↔ Bob
+
+but not:
+
+Alice ↔ Bob
+🏛️ Architecture stayed consistent
+
+Your module now follows:
+
+internal/conversations/
+
+├── handler.go
+├── service.go
+└── repository.go
+
+with:
+
+HTTP
+ |
+Handler
+ |
+Service
+ |
+Repository
+ |
+sqlc
+ |
+PostgreSQL
+
+This consistency will make messages, friends, notifications, and uploads much easier.
+
+Current backend capabilities
+
+You now have:
+
+✅ User registration
+✅ Password hashing
+✅ Login
+✅ JWT access tokens
+✅ JWT middleware
+✅ /me
+✅ Refresh tokens
+✅ Refresh token rotation
+✅ Logout
+✅ Logout all devices
+✅ Conversation creation
+✅ Transactional conversation creation
+✅ Conversation members
+✅ Duplicate direct conversation prevention
+✅ List user conversations
+
+Next milestone 🚀
+
+The next feature is the big one:
+
+Messages
 
 We'll add:
 
-internal/auth/
-    jwt.go
-    middleware.go
+internal/messages/
 
-The middleware will:
+├── handler.go
+├── service.go
+└── repository.go
 
-Read:
-Authorization: Bearer <token>
-Validate:
-signature
-expiry
-claims
-Put the user ID into the request context.
+Database:
 
-Then handlers can do:
+messages
 
-userID := auth.UserIDFromContext(r.Context())
+id
+conversation_id
+sender_id
+content
+created_at
 
-After middleware, we'll create:
+Features:
 
-GET /me
+Send message
+POST /messages
+Verify sender belongs to conversation
+Is Martin a member?
 
-Flow:
+YES → send
 
-curl
- |
- | Authorization: Bearer eyJ...
- |
- v
-JWT Middleware
- |
- v
-/me Handler
- |
- v
-Database lookup
- |
- v
-{
-  "id": "...",
-  "email": "test@test.com"
-}
+NO → reject
+Retrieve messages
+GET /conversations/{id}/messages
+Add pagination
+limit
+cursor
 
-That endpoint will be the first real proof that your authentication architecture works.
+Then after REST messages are working:
 
-Before we write middleware, I want to make one small improvement to jwt.go: add a ParseAccessToken() function next to GenerateAccessToken(). Then the middleware will have a clean API instead of knowing JWT internals.
+PostgreSQL
+     |
+     |
+ Redis Pub/Sub
+     |
+ WebSocket Hub
+     |
+ Flutter clients
+
+and you'll have real-time chat.
+
+Today was basically the transition from authentication system → actual messaging platform foundation. 🚀

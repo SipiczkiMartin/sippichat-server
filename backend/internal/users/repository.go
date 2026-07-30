@@ -5,15 +5,21 @@ import (
 
 	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository struct {
+	pool    *pgxpool.Pool
 	queries *db.Queries
 }
 
-func NewRepository(queries *db.Queries) *Repository {
-	return &Repository{queries: queries}
+func NewRepository(pool *pgxpool.Pool) *Repository {
+	return &Repository{
+		pool:    pool,
+		queries: db.New(pool),
+	}
 }
 
 func (r *Repository) Create(ctx context.Context, email string, passwordHash string) (db.User, error) {
@@ -39,4 +45,15 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (db.User, error)
 			Valid: true,
 		},
 	)
+}
+
+func (r *Repository) BeginTx(ctx context.Context) (pgx.Tx, error) {
+	return r.pool.Begin(ctx)
+}
+
+func (r *Repository) WithTx(tx pgx.Tx) *Repository {
+	return &Repository{
+		pool:    r.pool,
+		queries: db.New(tx),
+	}
 }

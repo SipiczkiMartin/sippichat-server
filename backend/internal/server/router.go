@@ -3,8 +3,9 @@ package server
 import (
 	"net/http"
 
+	"github.com/SipiczkiMartin/chat-app/internal/auth"
 	"github.com/SipiczkiMartin/chat-app/internal/config"
-	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
+	"github.com/SipiczkiMartin/chat-app/internal/conversations"
 	"github.com/SipiczkiMartin/chat-app/internal/users"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -13,11 +14,14 @@ import (
 func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	r := chi.NewRouter()
 
-	queries := db.New(pool)
+	userRepo := users.NewRepository(pool)
+	authRepo := auth.NewRepository(pool)
+	userService := users.NewService(userRepo, authRepo, cfg.JWTSecret)
+	userHandler := users.NewHandler(userService)
 
-	userRepo := users.NewRepository(queries)
-	userService := users.NewService(userRepo)
-	userHandler := users.NewHandler(userService, cfg.JWTSecret)
+	conversationRepo := conversations.NewRepository(pool)
+	conversationService := conversations.NewService(conversationRepo)
+	conversationHandler := conversations.NewHandler(conversationService)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
@@ -25,5 +29,17 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 
 	r.Post("/auth/register", userHandler.Register)
 	r.Post("/auth/login", userHandler.Login)
+	r.Post("/auth/refresh", userHandler.RefreshToken)
+	r.Post("/auth/logout", userHandler.Logout)
+
+	r.Post("/conversations", conversationHandler.CreateConversation)
+	r.Get("/conversations", conversationHandler.ListConversations)
+
+	r.Group(func(r chi.Router) {
+		r.Use(auth.JWTMiddleware(cfg.JWTSecret))
+		r.Get("/me", userHandler.Me)
+		r.Post("/auth/logout-all", userHandler.LogoutAll)
+	})
+
 	return r
 }

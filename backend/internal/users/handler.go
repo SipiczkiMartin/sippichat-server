@@ -9,12 +9,11 @@ import (
 )
 
 type Handler struct {
-	service   *Service
-	jwtSecret string
+	service *Service
 }
 
-func NewHandler(service *Service, jwtSecret string) *Handler {
-	return &Handler{service: service, jwtSecret: jwtSecret}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
 type registerRequest struct {
@@ -74,8 +73,9 @@ type loginRequest struct {
 }
 
 type loginResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +86,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.service.Login(
+	result, err := h.service.Login(
 		r.Context(),
 		LoginInput{
 			Email:    req.Email,
@@ -104,20 +104,146 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userID := uuid.UUID(user.ID.Bytes)
-
-	token, err := auth.GenerateAccessToken(userID, h.jwtSecret)
-
-	if err != nil {
-		http.Error(w, "could not generate token", http.StatusInternalServerError)
-	}
-
 	response := loginResponse{
-		AccessToken: token,
-		ExpiresIn:   900,
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		ExpiresIn:    result.ExpiresIn,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+type meResponse struct {
+	ID    string `json:"id"`
+	Email string `json:"email"`
+}
+
+func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	if userID == uuid.Nil {
+		http.Error(
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	user, err := h.service.GetByID(r.Context(), userID)
+	if err != nil {
+		http.Error(
+			w,
+			"user not found",
+			http.StatusNotFound,
+		)
+		return
+	}
+
+	response := meResponse{
+		ID:    user.ID.String(),
+		Email: user.Email,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type tokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	ExpiresIn    int    `json:"expires_in"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+func (h *Handler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	result, err := h.service.RefreshToken(r.Context(), req.RefreshToken)
+	if err != nil {
+		switch err {
+		case ErrInvalidRefreshToken:
+			http.Error(w, err.Error(), http.StatusUnauthorized)
+		default:
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	response := tokenResponse{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		ExpiresIn:    result.ExpiresIn,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
+type logoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	var req logoutRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(
+			w,
+			"invalid request body",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	err := h.service.Logout(
+		r.Context(),
+		req.RefreshToken,
+	)
+
+	if err != nil {
+		http.Error(
+			w,
+			"internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	if userID == uuid.Nil {
+		http.Error(
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	err := h.service.LogoutAll(r.Context(), userID)
+	if err != nil {
+		http.Error(
+			w,
+			"internal server error",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

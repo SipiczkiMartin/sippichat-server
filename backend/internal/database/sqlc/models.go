@@ -8,12 +8,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Conversation struct {
+	ID        pgtype.UUID
+	Type      string
+	CreatedAt pgtype.Timestamptz
+}
+
+type ConversationMember struct {
+	ConversationID pgtype.UUID
+	UserID         pgtype.UUID
+	JoinedAt       pgtype.Timestamptz
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID
 	TokenHash string
 	ExpiresAt pgtype.Timestamptz
 	CreatedAt pgtype.Timestamptz
+	RevokedAt pgtype.Timestamptz
 }
 
 type User struct {
