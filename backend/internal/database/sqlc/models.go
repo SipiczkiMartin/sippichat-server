@@ -20,6 +20,14 @@ type ConversationMember struct {
 	JoinedAt       pgtype.Timestamptz
 }
 
+type Message struct {
+	ID             pgtype.UUID
+	ConversationID pgtype.UUID
+	SenderID       pgtype.UUID
+	Content        string
+	CreatedAt      pgtype.Timestamptz
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID

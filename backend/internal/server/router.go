@@ -6,6 +6,7 @@ import (
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
 	"github.com/SipiczkiMartin/chat-app/internal/config"
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
+	"github.com/SipiczkiMartin/chat-app/internal/messages"
 	"github.com/SipiczkiMartin/chat-app/internal/users"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -23,6 +24,10 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	conversationService := conversations.NewService(conversationRepo)
 	conversationHandler := conversations.NewHandler(conversationService)
 
+	messageRepo := messages.NewRepository(pool)
+	messageService := messages.NewService(messageRepo)
+	messageHandler := messages.NewHandler(messageService)
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
@@ -32,13 +37,16 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	r.Post("/auth/refresh", userHandler.RefreshToken)
 	r.Post("/auth/logout", userHandler.Logout)
 
-	r.Post("/conversations", conversationHandler.CreateConversation)
-	r.Get("/conversations", conversationHandler.ListConversations)
-
 	r.Group(func(r chi.Router) {
 		r.Use(auth.JWTMiddleware(cfg.JWTSecret))
 		r.Get("/me", userHandler.Me)
 		r.Post("/auth/logout-all", userHandler.LogoutAll)
+
+		r.Post("/conversations", conversationHandler.CreateConversation)
+		r.Get("/conversations", conversationHandler.ListConversations)
+
+		r.Post("/conversations/{conversationID}/messages", messageHandler.CreateMessage)
+		r.Get("/conversations/{conversationID}/messages", messageHandler.ListMessages)
 	})
 
 	return r
