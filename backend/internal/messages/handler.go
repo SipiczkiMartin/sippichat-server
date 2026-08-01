@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
+	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -22,6 +24,24 @@ func NewHandler(servicer *Service) *Handler {
 
 type createMessageRequest struct {
 	Content string `json:"content"`
+}
+
+type MessageResponse struct {
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversation_id"`
+	SenderID       string    `json:"sender_id"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+func toMessageResponse(message db.Message) MessageResponse {
+	return MessageResponse{
+		ID:             message.ID.String(),
+		ConversationID: message.ConversationID.String(),
+		SenderID:       message.SenderID.String(),
+		Content:        message.Content,
+		CreatedAt:      message.CreatedAt.Time,
+	}
 }
 
 func (h *Handler) CreateMessage(
@@ -81,7 +101,8 @@ func (h *Handler) CreateMessage(
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(message)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(toMessageResponse(message))
 }
 
 func (h *Handler) ListMessages(
@@ -133,7 +154,12 @@ func (h *Handler) ListMessages(
 		return
 	}
 
+	responses := make([]MessageResponse, 0, len(messages))
+	for _, message := range messages {
+		responses = append(responses, toMessageResponse(message))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(messages)
+	json.NewEncoder(w).Encode(responses)
 }
