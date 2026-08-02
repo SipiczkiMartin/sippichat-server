@@ -53,3 +53,8 @@ JOIN conversation_members cm
     ON cm.conversation_id = c.id
 WHERE cm.user_id = $1
 ORDER BY c.created_at DESC;
+
+-- name: ListConversationMembers :many
+SELECT user_id
+FROM conversation_members
+WHERE conversation_id = $1;

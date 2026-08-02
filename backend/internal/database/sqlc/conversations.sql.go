@@ -93,6 +93,32 @@ func (q *Queries) GetDirectConversation(ctx context.Context, arg GetDirectConver
 	return i, err
 }
 
+const listConversationMembers = `-- name: ListConversationMembers :many
+SELECT user_id
+FROM conversation_members
+WHERE conversation_id = $1
+`
+
+func (q *Queries) ListConversationMembers(ctx context.Context, conversationID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listConversationMembers, conversationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.UUID
+	for rows.Next() {
+		var user_id pgtype.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listConversations = `-- name: ListConversations :many
 SELECT
     c.id,

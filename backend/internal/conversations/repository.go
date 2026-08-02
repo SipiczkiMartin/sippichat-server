@@ -66,3 +66,10 @@ func (r *Repository) ListConversations(
 ) ([]db.Conversation, error) {
 	return r.queries.ListConversations(ctx, userID)
 }
+
+func (r *Repository) ListConversationMembers(
+	ctx context.Context,
+	conversationID pgtype.UUID,
+) ([]pgtype.UUID, error) {
+	return r.queries.ListConversationMembers(ctx, conversationID)
+}

@@ -1,0 +1,38 @@
+{ "id": "8f4d1293-e480-4ac5-818a-cf6db5b53b6c", "email": "alice@test.com" }
+
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGY0ZDEyOTMtZTQ4MC00YWM1LTgxOGEtY2Y2ZGI1YjUzYjZjIiwiZXhwIjoxNzg1NTk0MjU4LCJpYXQiOjE3ODU1OTMzNTh9.NFJmsVx5bX8Dl1rITdNA6VplWyhg2LQ02XfKp-A-_Ks","refresh_token":"c7a3329c7a55f1bd0954d1b5d0ff630da102f15ee7a24360e37fb27010bc730a","expires_in":900}
+
+
+// bob
+{"id":"aeb3310a-f366-4b88-910e-5698358f571b","email":"bob@test.com"}
+
+curl -X POST http://localhost:8080/conversations \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWViMzMxMGEtZjM2Ni00Yjg4LTkxMGUtNTY5ODM1OGY1NzFiIiwiZXhwIjoxNzg1NTg0NTAzLCJpYXQiOjE3ODU1ODM2MDN9.vJmChVeaaKbtSnV6rFO_xmm4Ct7a9jmv4iYNRl7PAE4" \
+-d '{
+  "user_id": "8f4d1293-e480-4ac5-818a-cf6db5b53b6c"
+}'
+
+curl -X GET http://localhost:8080/conversations \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGY0ZDEyOTMtZTQ4MC00YWM1LTgxOGEtY2Y2ZGI1YjUzYjZjIiwiZXhwIjoxNzg1NTg0Mjg1LCJpYXQiOjE3ODU1ODMzODV9.N_-GXJtCuoFxpte9rF4LzH8ao5Bb2YjyPa0Z8nwWg8E"
+
+conversation id
+{"id":"4f4ffdcb-4f7a-499f-b72d-271dbf1a7dcf"}
+
+[{"ID":"4f4ffdcb-4f7a-499f-b72d-271dbf1a7dcf","Type":"direct","CreatedAt":"2026-08-01T13:24:31.7635+02:00"}]
+
+
+// bob token
+{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWViMzMxMGEtZjM2Ni00Yjg4LTkxMGUtNTY5ODM1OGY1NzFiIiwiZXhwIjoxNzg1NTk0NzIxLCJpYXQiOjE3ODU1OTM4MjF9.2El2f0bff6Tu-QQF5dBThmg8J1TsO07YJkpYd3TrBFI","refresh_token":"67c8caa57f024fdad9a3392c7528fc50506d81fd6cb0a2927c317a3679b85de9","expires_in":900}
+
+
+
+curl -X POST http://localhost:8080/conversations/4f4ffdcb-4f7a-499f-b72d-271dbf1a7dcf/messages \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYWViMzMxMGEtZjM2Ni00Yjg4LTkxMGUtNTY5ODM1OGY1NzFiIiwiZXhwIjoxNzg1NTk0NzIxLCJpYXQiOjE3ODU1OTM4MjF9.2El2f0bff6Tu-QQF5dBThmg8J1TsO07YJkpYd3TrBFI" \
+-d '{
+  "content": "Hey Alice! Nice to hear from you."
+}'
+
+curl -X GET http://localhost:8080/conversations/4f4ffdcb-4f7a-499f-b72d-271dbf1a7dcf/messages \
+-H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiOGY0ZDEyOTMtZTQ4MC00YWM1LTgxOGEtY2Y2ZGI1YjUzYjZjIiwiZXhwIjoxNzg1NTk0MjU4LCJpYXQiOjE3ODU1OTMzNTh9.NFJmsVx5bX8Dl1rITdNA6VplWyhg2LQ02XfKp-A-_Ks"

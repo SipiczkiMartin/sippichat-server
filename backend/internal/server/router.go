@@ -8,12 +8,16 @@ import (
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
 	"github.com/SipiczkiMartin/chat-app/internal/messages"
 	"github.com/SipiczkiMartin/chat-app/internal/users"
+	"github.com/SipiczkiMartin/chat-app/internal/websocket"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	r := chi.NewRouter()
+
+	hub := websocket.NewHub()
+	wsHandler := websocket.NewHandler(hub)
 
 	userRepo := users.NewRepository(pool)
 	authRepo := auth.NewRepository(pool)
@@ -39,6 +43,7 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.JWTMiddleware(cfg.JWTSecret))
+		r.Get("/ws", wsHandler.ServeHTTP)
 		r.Get("/me", userHandler.Me)
 		r.Post("/auth/logout-all", userHandler.LogoutAll)
 
