@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,7 +24,11 @@ type CreateConversationInput struct {
 	MemberID  uuid.UUID
 }
 
-func (s *Service) CreateConversation(ctx context.Context, input CreateConversationInput) (db.Conversation, error) {
+func (s *Service) CreateConversation(
+	ctx context.Context,
+	input CreateConversationInput,
+) (Conversation, error) {
+
 	creatorID := pgtype.UUID{
 		Bytes: input.CreatorID,
 		Valid: true,
@@ -36,12 +39,11 @@ func (s *Service) CreateConversation(ctx context.Context, input CreateConversati
 		Valid: true,
 	}
 
-	//no conversation with myself
 	if input.CreatorID == input.MemberID {
-		return db.Conversation{}, errors.New("Can't chat with yourself!")
+		return Conversation{}, errors.New("can't chat with yourself")
 	}
 
-	//check if direct conversation exists
+	// check existing direct conversation
 	conversation, err := s.repo.GetDirectConversation(
 		ctx,
 		creatorID,
@@ -49,63 +51,77 @@ func (s *Service) CreateConversation(ctx context.Context, input CreateConversati
 	)
 
 	if err == nil {
-		return conversation, nil
+
+		return s.repo.GetConversationDetails(
+			ctx,
+			conversation.ID,
+			creatorID,
+		)
 	}
 
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return db.Conversation{}, err
+		return Conversation{}, err
 	}
 
 	tx, err := s.repo.BeginTx(ctx)
+
 	if err != nil {
-		return db.Conversation{}, err
+		return Conversation{}, err
 	}
 
 	defer tx.Rollback(ctx)
 
 	repo := s.repo.WithTx(tx)
 
-	conversation, err = repo.CreateConversation(ctx, "direct")
+	conversation, err = repo.CreateConversation(
+		ctx,
+		"direct",
+	)
+
 	if err != nil {
-		return db.Conversation{}, err
+		return Conversation{}, err
 	}
 
-	err = repo.AddMember(
+	if err := repo.AddMember(
+		ctx,
+		conversation.ID,
+		creatorID,
+	); err != nil {
+		return Conversation{}, err
+	}
+
+	if err := repo.AddMember(
+		ctx,
+		conversation.ID,
+		memberID,
+	); err != nil {
+		return Conversation{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Conversation{}, err
+	}
+
+	// load full conversation with participant
+	return s.repo.GetConversationDetails(
 		ctx,
 		conversation.ID,
 		creatorID,
 	)
-
-	if err != nil {
-		return db.Conversation{}, err
-	}
-
-	err = repo.AddMember(
-		ctx,
-		conversation.ID,
-		memberID,
-	)
-
-	if err != nil {
-		return db.Conversation{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return db.Conversation{}, err
-	}
-
-	return conversation, nil
-
 }
 
 func (s *Service) ListConversations(
 	ctx context.Context,
 	userID uuid.UUID,
-) ([]db.Conversation, error) {
+) ([]Conversation, error) {
+
 	dbUserID := pgtype.UUID{
 		Bytes: userID,
 		Valid: true,
 	}
 
-	return s.repo.ListConversations(ctx, dbUserID)
+	return s.repo.ListConversations(
+		ctx,
+		dbUserID,
+	)
 }

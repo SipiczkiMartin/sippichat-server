@@ -28,6 +28,22 @@ type Message struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type MessageRead struct {
+	MessageID pgtype.UUID
+	UserID    pgtype.UUID
+	ReadAt    pgtype.Timestamptz
+}
+
+type Profile struct {
+	UserID      pgtype.UUID
+	Username    string
+	DisplayName string
+	Bio         pgtype.Text
+	AvatarUrl   pgtype.Text
+	CreatedAt   pgtype.Timestamp
+	UpdatedAt   pgtype.Timestamp
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID

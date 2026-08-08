@@ -41,6 +41,47 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	return i, err
 }
 
+const getCurrentUser = `-- name: GetCurrentUser :one
+SELECT
+    u.id,
+    u.email,
+    u.created_at,
+    p.username,
+    p.display_name,
+    p.bio,
+    p.avatar_url
+FROM users u
+LEFT JOIN profiles p
+    ON p.user_id = u.id
+WHERE u.id = $1
+LIMIT 1
+`
+
+type GetCurrentUserRow struct {
+	ID          pgtype.UUID
+	Email       string
+	CreatedAt   pgtype.Timestamptz
+	Username    pgtype.Text
+	DisplayName pgtype.Text
+	Bio         pgtype.Text
+	AvatarUrl   pgtype.Text
+}
+
+func (q *Queries) GetCurrentUser(ctx context.Context, id pgtype.UUID) (GetCurrentUserRow, error) {
+	row := q.db.QueryRow(ctx, getCurrentUser, id)
+	var i GetCurrentUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.CreatedAt,
+		&i.Username,
+		&i.DisplayName,
+		&i.Bio,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT id, email, password_hash, created_at, updated_at
 FROM users

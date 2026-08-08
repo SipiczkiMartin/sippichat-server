@@ -62,6 +62,66 @@ func (q *Queries) GetConversationByID(ctx context.Context, id pgtype.UUID) (Conv
 	return i, err
 }
 
+const getConversationDetails = `-- name: GetConversationDetails :one
+SELECT
+    c.id,
+    c.type,
+    c.created_at,
+
+    p.user_id AS participant_id,
+    p.username,
+    p.display_name,
+    p.avatar_url
+
+FROM conversations c
+
+JOIN conversation_members cm_self
+ON cm_self.conversation_id = c.id
+
+JOIN conversation_members cm_other
+ON cm_other.conversation_id = c.id
+AND cm_other.user_id <> cm_self.user_id
+
+JOIN profiles p
+ON p.user_id = cm_other.user_id
+
+WHERE
+    c.id = $1
+    AND cm_self.user_id = $2
+
+LIMIT 1
+`
+
+type GetConversationDetailsParams struct {
+	ID     pgtype.UUID
+	UserID pgtype.UUID
+}
+
+type GetConversationDetailsRow struct {
+	ID            pgtype.UUID
+	Type          string
+	CreatedAt     pgtype.Timestamptz
+	ParticipantID pgtype.UUID
+	Username      string
+	DisplayName   string
+	AvatarUrl     pgtype.Text
+}
+
+func (q *Queries) GetConversationDetails(ctx context.Context, arg GetConversationDetailsParams) (GetConversationDetailsRow, error) {
+	row := q.db.QueryRow(ctx, getConversationDetails, arg.ID, arg.UserID)
+	var i GetConversationDetailsRow
+	err := row.Scan(
+		&i.ID,
+		&i.Type,
+		&i.CreatedAt,
+		&i.ParticipantID,
+		&i.Username,
+		&i.DisplayName,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
 const getDirectConversation = `-- name: GetDirectConversation :one
 SELECT c.id, c.type, c.created_at
 FROM conversations c
@@ -123,24 +183,58 @@ const listConversations = `-- name: ListConversations :many
 SELECT
     c.id,
     c.type,
-    c.created_at
+    c.created_at,
+
+    p.user_id       AS participant_id,
+    p.username,
+    p.display_name,
+    p.avatar_url
+
 FROM conversations c
-JOIN conversation_members cm
-    ON cm.conversation_id = c.id
-WHERE cm.user_id = $1
+
+JOIN conversation_members self
+    ON self.conversation_id = c.id
+
+JOIN conversation_members other
+    ON other.conversation_id = c.id
+   AND other.user_id <> self.user_id
+
+JOIN profiles p
+    ON p.user_id = other.user_id
+
+WHERE self.user_id = $1
+
 ORDER BY c.created_at DESC
 `
 
-func (q *Queries) ListConversations(ctx context.Context, userID pgtype.UUID) ([]Conversation, error) {
+type ListConversationsRow struct {
+	ID            pgtype.UUID
+	Type          string
+	CreatedAt     pgtype.Timestamptz
+	ParticipantID pgtype.UUID
+	Username      string
+	DisplayName   string
+	AvatarUrl     pgtype.Text
+}
+
+func (q *Queries) ListConversations(ctx context.Context, userID pgtype.UUID) ([]ListConversationsRow, error) {
 	rows, err := q.db.Query(ctx, listConversations, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Conversation
+	var items []ListConversationsRow
 	for rows.Next() {
-		var i Conversation
-		if err := rows.Scan(&i.ID, &i.Type, &i.CreatedAt); err != nil {
+		var i ListConversationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.CreatedAt,
+			&i.ParticipantID,
+			&i.Username,
+			&i.DisplayName,
+			&i.AvatarUrl,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

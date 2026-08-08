@@ -3,6 +3,7 @@ package users
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
 	"github.com/google/uuid"
@@ -21,11 +22,6 @@ type registerRequest struct {
 	Password string `json:"password"`
 }
 
-type registerResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-}
-
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
 
@@ -39,7 +35,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.service.Register(
+	result, err := h.service.Register(
 		r.Context(),
 		RegisterInput{
 			Email:    req.Email,
@@ -56,12 +52,15 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := registerResponse{
-		ID:    user.ID.String(),
-		Email: user.Email,
+	response := loginResponse{
+		AccessToken:  result.AccessToken,
+		RefreshToken: result.RefreshToken,
+		ExpiresIn:    result.ExpiresIn,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+
 	json.NewEncoder(w).Encode(response)
 }
 
@@ -116,8 +115,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 type meResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID          string  `json:"id"`
+	Email       string  `json:"email"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	Bio         *string `json:"bio,omitempty"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
+	CreatedAt   string  `json:"created_at"`
 }
 
 func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +136,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.service.GetByID(r.Context(), userID)
+	user, err := h.service.GetCurrentUser(r.Context(), userID)
 	if err != nil {
 		http.Error(
 			w,
@@ -142,13 +146,136 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var bio *string
+	if user.Bio.Valid {
+		bio = &user.Bio.String
+	}
+
+	var avatarURL *string
+	if user.AvatarUrl.Valid {
+		avatarURL = &user.AvatarUrl.String
+	}
+
 	response := meResponse{
-		ID:    user.ID.String(),
-		Email: user.Email,
+		ID:          user.ID.String(),
+		Email:       user.Email,
+		Username:    user.Username.String,
+		DisplayName: user.DisplayName.String,
+		Bio:         bio,
+		AvatarURL:   avatarURL,
+		CreatedAt:   user.CreatedAt.Time.Format(time.RFC3339),
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(
+			w,
+			"failed to encode response",
+			http.StatusInternalServerError,
+		)
+	}
+}
+
+type updateProfileRequest struct {
+	DisplayName string `json:"display_name"`
+	Bio         string `json:"bio"`
+}
+
+type profileResponse struct {
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	Bio         *string `json:"bio,omitempty"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
+	CreatedAt   string  `json:"created_at"`
+}
+
+func (h *Handler) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	if userID == uuid.Nil {
+		http.Error(
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	var req updateProfileRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(
+			w,
+			"invalid request body",
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	_, err := h.service.UpdateProfile(
+		r.Context(),
+		userID,
+		UpdateProfileInput{
+			DisplayName: req.DisplayName,
+			Bio:         req.Bio,
+		},
+	)
+
+	if err != nil {
+		http.Error(
+			w,
+			err.Error(),
+			http.StatusBadRequest,
+		)
+		return
+	}
+
+	user, err := h.service.GetCurrentUser(
+		r.Context(),
+		userID,
+	)
+
+	if err != nil {
+		http.Error(
+			w,
+			"failed to get updated profile",
+			http.StatusInternalServerError,
+		)
+		return
+	}
+
+	var bio *string
+	if user.Bio.Valid {
+		bio = &user.Bio.String
+	}
+
+	var avatarURL *string
+	if user.AvatarUrl.Valid {
+		avatarURL = &user.AvatarUrl.String
+	}
+
+	response := profileResponse{
+		ID:          user.ID.String(),
+		Username:    user.Username.String,
+		DisplayName: user.DisplayName.String,
+		Bio:         bio,
+		AvatarURL:   avatarURL,
+		CreatedAt:   user.CreatedAt.Time.Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(
+			w,
+			"failed to encode response",
+			http.StatusInternalServerError,
+		)
+	}
 }
 
 type refreshRequest struct {

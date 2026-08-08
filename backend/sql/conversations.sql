@@ -47,14 +47,59 @@ LIMIT 1;
 SELECT
     c.id,
     c.type,
-    c.created_at
+    c.created_at,
+
+    p.user_id       AS participant_id,
+    p.username,
+    p.display_name,
+    p.avatar_url
+
 FROM conversations c
-JOIN conversation_members cm
-    ON cm.conversation_id = c.id
-WHERE cm.user_id = $1
+
+JOIN conversation_members self
+    ON self.conversation_id = c.id
+
+JOIN conversation_members other
+    ON other.conversation_id = c.id
+   AND other.user_id <> self.user_id
+
+JOIN profiles p
+    ON p.user_id = other.user_id
+
+WHERE self.user_id = $1
+
 ORDER BY c.created_at DESC;
 
 -- name: ListConversationMembers :many
 SELECT user_id
 FROM conversation_members
 WHERE conversation_id = $1;
+
+-- name: GetConversationDetails :one
+SELECT
+    c.id,
+    c.type,
+    c.created_at,
+
+    p.user_id AS participant_id,
+    p.username,
+    p.display_name,
+    p.avatar_url
+
+FROM conversations c
+
+JOIN conversation_members cm_self
+ON cm_self.conversation_id = c.id
+
+JOIN conversation_members cm_other
+ON cm_other.conversation_id = c.id
+AND cm_other.user_id <> cm_self.user_id
+
+JOIN profiles p
+ON p.user_id = cm_other.user_id
+
+WHERE
+    c.id = $1
+    AND cm_self.user_id = $2
+
+LIMIT 1;

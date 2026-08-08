@@ -3,6 +3,7 @@ package conversations
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
 	"github.com/google/uuid"
@@ -20,10 +21,6 @@ func NewHandler(service *Service) *Handler {
 
 type createConversationRequest struct {
 	UserID string `json:"user_id"`
-}
-
-type createConversationResponse struct {
-	ID string `json:"id"`
 }
 
 func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +46,8 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	memberId, err := uuid.Parse(req.UserID)
+	memberID, err := uuid.Parse(req.UserID)
+
 	if err != nil {
 		http.Error(
 			w,
@@ -63,27 +61,60 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 		r.Context(),
 		CreateConversationInput{
 			CreatorID: creatorID,
-			MemberID:  memberId,
+			MemberID:  memberID,
 		},
 	)
 
 	if err != nil {
 		http.Error(
 			w,
-			"internal server error",
-			http.StatusInternalServerError,
+			err.Error(),
+			http.StatusBadRequest,
 		)
 		return
 	}
 
-	response := createConversationResponse{
-		ID: conversation.ID.String(),
-	}
+	response := toConversationResponse(conversation)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 
 	json.NewEncoder(w).Encode(response)
+}
+
+type ParticipantResponse struct {
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
+}
+
+type LastMessageResponse struct {
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type ConversationResponse struct {
+	ID          string               `json:"id"`
+	Type        string               `json:"type"`
+	CreatedAt   time.Time            `json:"created_at"`
+	Participant *ParticipantResponse `json:"participant,omitempty"`
+	LastMessage *LastMessageResponse `json:"last_message,omitempty"`
+}
+
+func toConversationResponse(conversation Conversation) ConversationResponse {
+	return ConversationResponse{
+		ID:        conversation.ID.String(),
+		Type:      conversation.Type,
+		CreatedAt: conversation.CreatedAt,
+
+		Participant: &ParticipantResponse{
+			ID:          conversation.Participant.ID.String(),
+			Username:    conversation.Participant.Username,
+			DisplayName: conversation.Participant.DisplayName,
+			AvatarURL:   conversation.Participant.AvatarURL,
+		},
+	}
 }
 
 func (h *Handler) ListConversations(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +129,7 @@ func (h *Handler) ListConversations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	conversation, err := h.service.ListConversations(
+	conversations, err := h.service.ListConversations(
 		r.Context(),
 		userID,
 	)
@@ -112,7 +143,13 @@ func (h *Handler) ListConversations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	responses := make([]ConversationResponse, 0, len(conversations))
+
+	for _, c := range conversations {
+		responses = append(responses, toConversationResponse(c))
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(conversation)
+	json.NewEncoder(w).Encode(responses)
 }

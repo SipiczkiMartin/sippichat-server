@@ -48,8 +48,8 @@ func (h *Hub) Unregister(client *WSClient) {
 }
 
 func (h *Hub) Connections(userID uuid.UUID) []*WSClient {
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 
 	connections := h.clients[userID]
 	result := make([]*WSClient, 0, len(connections))
@@ -59,4 +59,20 @@ func (h *Hub) Connections(userID uuid.UUID) []*WSClient {
 	}
 
 	return result
+}
+
+func (h *Hub) SendToUser(userID uuid.UUID, event any) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	connections, ok := h.clients[userID]
+	if !ok {
+		return
+	}
+
+	for client := range connections {
+		if err := client.Send(event); err != nil {
+			log.Printf("failed to send websocket event to %s: %v", userID, err)
+		}
+	}
 }

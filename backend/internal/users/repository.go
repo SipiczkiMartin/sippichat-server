@@ -32,6 +32,22 @@ func (r *Repository) Create(ctx context.Context, email string, passwordHash stri
 	)
 }
 
+func (r *Repository) CreateProfile(
+	ctx context.Context,
+	userID pgtype.UUID,
+	username string,
+	displayName string,
+) (db.Profile, error) {
+	return r.queries.CreateProfile(
+		ctx,
+		db.CreateProfileParams{
+			UserID:      userID,
+			Username:    username,
+			DisplayName: displayName,
+		},
+	)
+}
+
 func (r *Repository) GetByEmail(ctx context.Context, email string) (db.User, error) {
 	return r.queries.GetUserByEmail(ctx, email)
 }
@@ -45,6 +61,32 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (db.User, error)
 			Valid: true,
 		},
 	)
+}
+
+func (r *Repository) UpdateProfile(
+	ctx context.Context,
+	userID uuid.UUID,
+	displayName string,
+	bio string,
+) (db.Profile, error) {
+	return r.queries.UpdateProfile(ctx, db.UpdateProfileParams{
+		UserID: pgtype.UUID{
+			Bytes: userID,
+			Valid: true,
+		},
+		DisplayName: displayName,
+		Bio: pgtype.Text{
+			String: bio,
+			Valid:  true,
+		},
+	})
+}
+
+func (r *Repository) GetCurrentUser(ctx context.Context, id uuid.UUID) (db.GetCurrentUserRow, error) {
+	return r.queries.GetCurrentUser(ctx, pgtype.UUID{
+		Bytes: id,
+		Valid: true,
+	})
 }
 
 func (r *Repository) BeginTx(ctx context.Context) (pgx.Tx, error) {

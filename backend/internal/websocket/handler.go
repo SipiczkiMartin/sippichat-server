@@ -1,25 +1,32 @@
 package websocket
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
+	"github.com/SipiczkiMartin/chat-app/internal/events"
+	"github.com/SipiczkiMartin/chat-app/internal/typing"
 	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 	"github.com/google/uuid"
 )
 
 type Handler struct {
-	hub *Hub
+	hub    *Hub
+	typing *typing.Service
 }
 
-func NewHandler(hub *Hub) *Handler {
+func NewHandler(hub *Hub, typing *typing.Service) *Handler {
 	return &Handler{
-		hub: hub,
+		hub:    hub,
+		typing: typing,
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
+	ctx := r.Context()
 
 	if userID == uuid.Nil {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -44,9 +51,57 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		_, _, err := conn.Read(r.Context())
+		var event events.Event
+
+		err := wsjson.Read(ctx, conn, &event)
 		if err != nil {
 			break
+		}
+
+		switch event.Type {
+		case events.EventTypingStarted:
+
+			payloadBytes, err := json.Marshal(event.Payload)
+			if err != nil {
+				continue
+			}
+
+			var payload events.TypingPayload
+			err = json.Unmarshal(payloadBytes, &payload)
+			if err != nil {
+				continue
+			}
+
+			err = h.typing.TypingStarted(
+				ctx, userID, payload.ConversationID,
+			)
+
+			if err != nil {
+				continue
+			}
+
+		case events.EventTypingStopped:
+
+			payloadBytes, err := json.Marshal(event.Payload)
+			if err != nil {
+				continue
+			}
+
+			var payload events.TypingPayload
+			err = json.Unmarshal(payloadBytes, &payload)
+			if err != nil {
+				continue
+			}
+
+			err = h.typing.TypingStopped(
+				ctx,
+				userID,
+				payload.ConversationID,
+			)
+
+			if err != nil {
+				continue
+			}
 		}
 	}
 }

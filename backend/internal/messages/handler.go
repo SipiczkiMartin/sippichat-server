@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
-	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -27,20 +26,33 @@ type createMessageRequest struct {
 }
 
 type MessageResponse struct {
-	ID             string    `json:"id"`
-	ConversationID string    `json:"conversation_id"`
-	SenderID       string    `json:"sender_id"`
-	Content        string    `json:"content"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string         `json:"id"`
+	ConversationID string         `json:"conversation_id"`
+	Content        string         `json:"content"`
+	CreatedAt      time.Time      `json:"created_at"`
+	Sender         SenderResponse `json:"sender"`
 }
 
-func toMessageResponse(message db.Message) MessageResponse {
+type SenderResponse struct {
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	AvatarURL   *string `json:"avatar_url,omitempty"`
+}
+
+func toMessageResponse(message Message) MessageResponse {
 	return MessageResponse{
 		ID:             message.ID.String(),
 		ConversationID: message.ConversationID.String(),
-		SenderID:       message.SenderID.String(),
 		Content:        message.Content,
-		CreatedAt:      message.CreatedAt.Time,
+		CreatedAt:      message.CreatedAt,
+
+		Sender: SenderResponse{
+			ID:          message.Sender.ID.String(),
+			Username:    message.Sender.Username,
+			DisplayName: message.Sender.DisplayName,
+			AvatarURL:   message.Sender.AvatarURL,
+		},
 	}
 }
 

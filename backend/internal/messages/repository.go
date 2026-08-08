@@ -4,6 +4,7 @@ import (
 	"context"
 
 	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -54,12 +55,50 @@ func (r *Repository) ListMessages(
 	ctx context.Context,
 	conversationID pgtype.UUID,
 	limit int32,
-) ([]db.Message, error) {
-	return r.queries.ListMessages(
+) ([]Message, error) {
+	rows, err := r.queries.ListMessages(
 		ctx,
 		db.ListMessagesParams{
 			ConversationID: conversationID,
 			Limit:          limit,
 		},
 	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	messages := make([]Message, 0, len(rows))
+
+	for _, row := range rows {
+
+		message := Message{
+			ID:             uuid.UUID(row.ID.Bytes),
+			ConversationID: uuid.UUID(row.ConversationID.Bytes),
+			Content:        row.Content,
+			CreatedAt:      row.CreatedAt.Time,
+
+			Sender: Sender{
+				ID:          uuid.UUID(row.SenderID.Bytes),
+				Username:    row.Username,
+				DisplayName: row.DisplayName,
+			},
+		}
+
+		if row.AvatarUrl.Valid {
+			avatar := row.AvatarUrl.String
+			message.Sender.AvatarURL = &avatar
+		}
+
+		messages = append(messages, message)
+	}
+
+	return messages, nil
+}
+
+func (r *Repository) GetMessageByID(
+	ctx context.Context,
+	messageID pgtype.UUID,
+) (db.GetMessageByIDRow, error) {
+	return r.queries.GetMessageByID(ctx, messageID)
 }

@@ -4,18 +4,24 @@ import (
 	"context"
 	"errors"
 
-	db "github.com/SipiczkiMartin/chat-app/internal/database/sqlc"
+	"github.com/SipiczkiMartin/chat-app/internal/conversations"
+	"github.com/SipiczkiMartin/chat-app/internal/events"
+	"github.com/SipiczkiMartin/chat-app/internal/websocket"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Service struct {
-	repo *Repository
+	repo             *Repository
+	conversationRepo *conversations.Repository
+	hub              *websocket.Hub
 }
 
-func NewService(repo *Repository) *Service {
+func NewService(repo *Repository, conversationRepo *conversations.Repository, hub *websocket.Hub) *Service {
 	return &Service{
-		repo: repo,
+		repo:             repo,
+		conversationRepo: conversationRepo,
+		hub:              hub,
 	}
 }
 
@@ -28,9 +34,9 @@ type SendMessageInput struct {
 func (s *Service) SendMessage(
 	ctx context.Context,
 	input SendMessageInput,
-) (db.Message, error) {
+) (Message, error) {
 	if input.Content == "" {
-		return db.Message{}, errors.New("no message content!")
+		return Message{}, errors.New("no message content!")
 	}
 
 	conversationID := pgtype.UUID{
@@ -50,26 +56,85 @@ func (s *Service) SendMessage(
 	)
 
 	if err != nil {
-		return db.Message{}, err
+		return Message{}, err
 	}
 
 	if !isMember {
-		return db.Message{}, errors.New("user is not a conversation member!")
+		return Message{}, errors.New("user is not a conversation member!")
 	}
 
-	return s.repo.CreateMessage(
+	message, err := s.repo.CreateMessage(
 		ctx,
 		conversationID,
 		senderID,
 		input.Content,
 	)
+
+	if err != nil {
+		return Message{}, err
+	}
+
+	messageDetails, err := s.repo.GetMessageByID(
+		ctx,
+		message.ID,
+	)
+
+	if err != nil {
+		return Message{}, err
+	}
+
+	newMessage := Message{
+		ID:             uuid.UUID(messageDetails.ID.Bytes),
+		ConversationID: uuid.UUID(messageDetails.ConversationID.Bytes),
+		Content:        messageDetails.Content,
+		CreatedAt:      messageDetails.CreatedAt.Time,
+
+		Sender: Sender{
+			ID:          uuid.UUID(messageDetails.SenderID.Bytes),
+			Username:    messageDetails.Username,
+			DisplayName: messageDetails.DisplayName,
+		},
+	}
+
+	if messageDetails.AvatarUrl.Valid {
+		avatar := messageDetails.AvatarUrl.String
+		newMessage.Sender.AvatarURL = &avatar
+	}
+
+	members, err := s.conversationRepo.ListConversationMembers(
+		ctx,
+		conversationID,
+	)
+
+	if err != nil {
+		return Message{}, err
+	}
+
+	event := events.Event{
+		Type:    events.EventMessageCreated,
+		Payload: newMessage,
+	}
+
+	for _, memberID := range members {
+
+		if !memberID.Valid {
+			continue
+		}
+
+		s.hub.SendToUser(
+			memberID.Bytes,
+			event,
+		)
+	}
+
+	return newMessage, nil
 }
 
 func (s *Service) ListMessages(
 	ctx context.Context,
 	conversationID uuid.UUID,
 	limit int32,
-) ([]db.Message, error) {
+) ([]Message, error) {
 	id := pgtype.UUID{
 		Bytes: conversationID,
 		Valid: true,

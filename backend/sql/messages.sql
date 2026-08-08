@@ -13,10 +13,25 @@ RETURNING *;
 
 
 -- name: ListMessages :many
-SELECT id, conversation_id, sender_id, content, created_at
-FROM messages
-WHERE conversation_id = $1
-ORDER BY created_at ASC
+SELECT
+    m.id,
+    m.conversation_id,
+    m.sender_id,
+    m.content,
+    m.created_at,
+
+    p.username,
+    p.display_name,
+    p.avatar_url
+
+FROM messages m
+
+JOIN profiles p
+    ON p.user_id = m.sender_id
+
+WHERE m.conversation_id = $1
+
+ORDER BY m.created_at ASC
 LIMIT $2;
 
 
@@ -27,3 +42,22 @@ SELECT EXISTS(
     WHERE conversation_id = $1
     AND user_id = $2
 );
+
+-- name: GetMessageByID :one
+SELECT
+    m.id,
+    m.conversation_id,
+    m.sender_id,
+    m.content,
+    m.created_at,
+
+    p.username,
+    p.display_name,
+    p.avatar_url
+
+FROM messages m
+
+JOIN profiles p
+    ON p.user_id = m.sender_id
+
+WHERE m.id = $1;

@@ -42,26 +42,62 @@ type LoginResult struct {
 	TokenResult
 }
 
-func (s *Service) Register(ctx context.Context, input RegisterInput) (db.User, error) {
+func (s *Service) Register(ctx context.Context, input RegisterInput) (TokenResult, error) {
 	//exists check
 	_, err := s.repo.GetByEmail(ctx, input.Email)
 	switch {
 	case err == nil:
-		return db.User{}, errors.New(
+		return TokenResult{}, errors.New(
 			"user already exists",
 		)
 
 	case !errors.Is(err, pgx.ErrNoRows):
-		return db.User{}, err
+		return TokenResult{}, err
 	}
 
 	passwordHash, err := auth.HashPassword(input.Password)
 
 	if err != nil {
-		return db.User{}, err
+		return TokenResult{}, err
 	}
 
-	return s.repo.Create(ctx, input.Email, passwordHash)
+	tx, err := s.repo.BeginTx(ctx)
+	if err != nil {
+		return TokenResult{}, err
+	}
+
+	defer tx.Rollback(ctx)
+
+	txUserRepo := s.repo.WithTx(tx)
+	txAuthRepo := s.authRepo.WithTx(tx)
+
+	user, err := txUserRepo.Create(ctx, input.Email, passwordHash)
+
+	if err != nil {
+		return TokenResult{}, err
+	}
+
+	_, err = txUserRepo.CreateProfile(
+		ctx,
+		user.ID,
+		input.Email,
+		input.Email,
+	)
+
+	if err != nil {
+		return TokenResult{}, err
+	}
+
+	tokens, err := s.issueTokens(ctx, user, txAuthRepo)
+	if err != nil {
+		return TokenResult{}, nil
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return TokenResult{}, err
+	}
+
+	return tokens, nil
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
@@ -74,33 +110,43 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 		return LoginResult{}, ErrInvalidCredentials
 	}
 
-	accessToken, err := auth.GenerateAccessToken(user.ID.Bytes, s.jwtSecret)
-	if err != nil {
-		return LoginResult{}, err
-	}
-
-	refreshToken, err := auth.GenerateRefreshToken()
-	if err != nil {
-		return LoginResult{}, err
-	}
-
-	refreshHash := auth.HashRefreshToken(refreshToken)
-
-	_, err = s.authRepo.CreateRefreshToken(ctx, user.ID, refreshHash,
-		pgtype.Timestamptz{
-			Time:  time.Now().Add(auth.RefreshTokenDuration),
-			Valid: true,
-		})
+	tokens, err := s.issueTokens(ctx, user, s.authRepo)
 	if err != nil {
 		return LoginResult{}, err
 	}
 
 	return LoginResult{
-		TokenResult: TokenResult{
-			AccessToken:  accessToken,
-			ExpiresIn:    int(auth.AccessTokenDuration.Seconds()),
-			RefreshToken: refreshToken,
-		},
+		TokenResult: tokens,
+	}, nil
+
+}
+
+func (s *Service) issueTokens(ctx context.Context, user db.User, authRepo *auth.Repository) (TokenResult, error) {
+	accessToken, err := auth.GenerateAccessToken(user.ID.Bytes, s.jwtSecret)
+	if err != nil {
+		return TokenResult{}, err
+	}
+
+	refreshToken, err := auth.GenerateRefreshToken()
+	if err != nil {
+		return TokenResult{}, err
+	}
+
+	refreshHash := auth.HashRefreshToken(refreshToken)
+
+	_, err = authRepo.CreateRefreshToken(ctx, user.ID, refreshHash,
+		pgtype.Timestamptz{
+			Time:  time.Now().Add(auth.RefreshTokenDuration),
+			Valid: true,
+		})
+	if err != nil {
+		return TokenResult{}, err
+	}
+
+	return TokenResult{
+		AccessToken:  accessToken,
+		ExpiresIn:    int(auth.AccessTokenDuration.Seconds()),
+		RefreshToken: refreshToken,
 	}, nil
 }
 
@@ -194,4 +240,30 @@ func (s *Service) LogoutAll(ctx context.Context, userID uuid.UUID) error {
 			Valid: true,
 		},
 	)
+}
+
+func (s *Service) GetCurrentUser(ctx context.Context, id uuid.UUID) (db.GetCurrentUserRow, error) {
+	return s.repo.GetCurrentUser(ctx, id)
+}
+
+type UpdateProfileInput struct {
+	DisplayName string
+	Bio         string
+}
+
+func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, input UpdateProfileInput) (db.Profile, error) {
+
+	if len(input.DisplayName) < 2 {
+		return db.Profile{}, errors.New("display name too short")
+	}
+
+	if len(input.DisplayName) > 50 {
+		return db.Profile{}, errors.New("display name too long")
+	}
+
+	if len(input.Bio) > 160 {
+		return db.Profile{}, errors.New("bio too long")
+	}
+
+	return s.repo.UpdateProfile(ctx, userID, input.DisplayName, input.Bio)
 }

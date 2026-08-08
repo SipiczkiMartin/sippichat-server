@@ -44,6 +44,53 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 	return i, err
 }
 
+const getMessageByID = `-- name: GetMessageByID :one
+SELECT
+    m.id,
+    m.conversation_id,
+    m.sender_id,
+    m.content,
+    m.created_at,
+
+    p.username,
+    p.display_name,
+    p.avatar_url
+
+FROM messages m
+
+JOIN profiles p
+    ON p.user_id = m.sender_id
+
+WHERE m.id = $1
+`
+
+type GetMessageByIDRow struct {
+	ID             pgtype.UUID
+	ConversationID pgtype.UUID
+	SenderID       pgtype.UUID
+	Content        string
+	CreatedAt      pgtype.Timestamptz
+	Username       string
+	DisplayName    string
+	AvatarUrl      pgtype.Text
+}
+
+func (q *Queries) GetMessageByID(ctx context.Context, id pgtype.UUID) (GetMessageByIDRow, error) {
+	row := q.db.QueryRow(ctx, getMessageByID, id)
+	var i GetMessageByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ConversationID,
+		&i.SenderID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.Username,
+		&i.DisplayName,
+		&i.AvatarUrl,
+	)
+	return i, err
+}
+
 const isConversationMember = `-- name: IsConversationMember :one
 SELECT EXISTS(
     SELECT 1
@@ -66,10 +113,25 @@ func (q *Queries) IsConversationMember(ctx context.Context, arg IsConversationMe
 }
 
 const listMessages = `-- name: ListMessages :many
-SELECT id, conversation_id, sender_id, content, created_at
-FROM messages
-WHERE conversation_id = $1
-ORDER BY created_at ASC
+SELECT
+    m.id,
+    m.conversation_id,
+    m.sender_id,
+    m.content,
+    m.created_at,
+
+    p.username,
+    p.display_name,
+    p.avatar_url
+
+FROM messages m
+
+JOIN profiles p
+    ON p.user_id = m.sender_id
+
+WHERE m.conversation_id = $1
+
+ORDER BY m.created_at ASC
 LIMIT $2
 `
 
@@ -78,21 +140,35 @@ type ListMessagesParams struct {
 	Limit          int32
 }
 
-func (q *Queries) ListMessages(ctx context.Context, arg ListMessagesParams) ([]Message, error) {
+type ListMessagesRow struct {
+	ID             pgtype.UUID
+	ConversationID pgtype.UUID
+	SenderID       pgtype.UUID
+	Content        string
+	CreatedAt      pgtype.Timestamptz
+	Username       string
+	DisplayName    string
+	AvatarUrl      pgtype.Text
+}
+
+func (q *Queries) ListMessages(ctx context.Context, arg ListMessagesParams) ([]ListMessagesRow, error) {
 	rows, err := q.db.Query(ctx, listMessages, arg.ConversationID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Message
+	var items []ListMessagesRow
 	for rows.Next() {
-		var i Message
+		var i ListMessagesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ConversationID,
 			&i.SenderID,
 			&i.Content,
 			&i.CreatedAt,
+			&i.Username,
+			&i.DisplayName,
+			&i.AvatarUrl,
 		); err != nil {
 			return nil, err
 		}
