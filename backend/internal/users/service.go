@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
@@ -266,4 +267,16 @@ func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, input Upd
 	}
 
 	return s.repo.UpdateProfile(ctx, userID, input.DisplayName, input.Bio)
+}
+
+func (s *Service) SearchUsers(ctx context.Context, currentUserID uuid.UUID, query string) ([]UserSearchResult, error) {
+	query = strings.TrimSpace(query)
+	if len(query) < 2 {
+		return []UserSearchResult{}, errors.New("search query too short")
+	}
+
+	if len(query) > 50 {
+		return []UserSearchResult{}, errors.New("search query too long")
+	}
+	return s.repo.Search(ctx, currentUserID, query)
 }

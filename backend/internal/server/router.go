@@ -28,12 +28,13 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	conversationHandler := conversations.NewHandler(conversationService)
 
 	hub := websocket.NewHub()
-	typingService := typing.NewService(conversationRepo, hub)
-	wsHandler := websocket.NewHandler(hub, typingService)
 
 	messageRepo := messages.NewRepository(pool)
 	messageService := messages.NewService(messageRepo, conversationRepo, hub)
 	messageHandler := messages.NewHandler(messageService)
+
+	typingService := typing.NewService(conversationRepo, hub)
+	wsHandler := websocket.NewHandler(hub, typingService, messageService)
 
 	readReceiptRepo := readreceipts.NewRepository(pool)
 	readReceiptService := readreceipts.NewService(
@@ -67,6 +68,7 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 		r.Get("/conversations/{conversationID}/messages", messageHandler.ListMessages)
 
 		r.Post("/messages/{messageID}/read", readReceiptHandler.MarkRead)
+		r.Get("/users/search", userHandler.Search)
 	})
 
 	return r

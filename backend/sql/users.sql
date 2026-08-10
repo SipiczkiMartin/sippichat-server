@@ -35,3 +35,21 @@ LEFT JOIN profiles p
     ON p.user_id = u.id
 WHERE u.id = $1
 LIMIT 1;
+
+
+-- name: SearchUsers :many
+SELECT
+    u.id,
+    p.username,
+    p.display_name,
+    p.avatar_url
+FROM users u
+JOIN profiles p
+    ON p.user_id = u.id
+WHERE u.id != $1
+  AND (
+      p.username ILIKE '%' || $2 || '%'
+      OR p.display_name ILIKE '%' || $2 || '%'
+  )
+ORDER BY p.username
+LIMIT 20;

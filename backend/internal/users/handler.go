@@ -374,3 +374,75 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+type SearchUserResponse struct {
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	DisplayName string  `json:"display_name"`
+	AvatarUrl   *string `json:"avatar_url,omitempty"`
+}
+
+func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+
+	if userID == uuid.Nil {
+		http.Error(
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
+		)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	users, err := h.service.SearchUsers(r.Context(), userID, query)
+	if err != nil {
+		switch err.Error() {
+		case "search query too short":
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusBadRequest,
+			)
+
+		case "search query too long":
+			http.Error(
+				w,
+				err.Error(),
+				http.StatusBadRequest,
+			)
+
+		default:
+			http.Error(
+				w,
+				"internal server error",
+				http.StatusInternalServerError,
+			)
+		}
+
+		return
+	}
+
+	response := make([]SearchUserResponse, 0, len(users))
+	for _, user := range users {
+		response = append(response,
+			SearchUserResponse{
+				ID:          user.ID.String(),
+				Username:    user.Username,
+				DisplayName: user.DisplayName,
+				AvatarUrl:   user.AvatarUrl,
+			},
+		)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(
+			w,
+			"failed to encode response",
+			http.StatusInternalServerError,
+		)
+	}
+
+}

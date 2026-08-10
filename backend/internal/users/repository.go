@@ -99,3 +99,46 @@ func (r *Repository) WithTx(tx pgx.Tx) *Repository {
 		queries: db.New(tx),
 	}
 }
+
+func (r *Repository) Search(
+	ctx context.Context,
+	currentUserID uuid.UUID,
+	query string,
+) ([]UserSearchResult, error) {
+	rows, err := r.queries.SearchUsers(
+		ctx,
+		db.SearchUsersParams{
+			ID: pgtype.UUID{
+				Bytes: currentUserID,
+				Valid: true,
+			},
+			Column2: pgtype.Text{
+				String: query,
+				Valid:  true,
+			},
+		},
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]UserSearchResult, 0, len(rows))
+
+	for _, row := range rows {
+		var avatarURL *string
+
+		if row.AvatarUrl.Valid {
+			avatarURL = &row.AvatarUrl.String
+		}
+
+		results = append(results, UserSearchResult{
+			ID:          row.ID.Bytes,
+			Username:    row.Username,
+			DisplayName: row.DisplayName,
+			AvatarUrl:   avatarURL,
+		})
+	}
+
+	return results, nil
+}

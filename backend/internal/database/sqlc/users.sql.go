@@ -121,3 +121,58 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 	)
 	return i, err
 }
+
+const searchUsers = `-- name: SearchUsers :many
+SELECT
+    u.id,
+    p.username,
+    p.display_name,
+    p.avatar_url
+FROM users u
+JOIN profiles p
+    ON p.user_id = u.id
+WHERE u.id != $1
+  AND (
+      p.username ILIKE '%' || $2 || '%'
+      OR p.display_name ILIKE '%' || $2 || '%'
+  )
+ORDER BY p.username
+LIMIT 20
+`
+
+type SearchUsersParams struct {
+	ID      pgtype.UUID
+	Column2 pgtype.Text
+}
+
+type SearchUsersRow struct {
+	ID          pgtype.UUID
+	Username    string
+	DisplayName string
+	AvatarUrl   pgtype.Text
+}
+
+func (q *Queries) SearchUsers(ctx context.Context, arg SearchUsersParams) ([]SearchUsersRow, error) {
+	rows, err := q.db.Query(ctx, searchUsers, arg.ID, arg.Column2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchUsersRow
+	for rows.Next() {
+		var i SearchUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.AvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

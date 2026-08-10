@@ -6,18 +6,21 @@ import (
 
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
 	"github.com/SipiczkiMartin/chat-app/internal/events"
-	"github.com/SipiczkiMartin/chat-app/internal/websocket"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Broadcaster interface {
+	SendToUser(userID uuid.UUID, event any)
+}
+
 type Service struct {
 	repo             *Repository
 	conversationRepo *conversations.Repository
-	hub              *websocket.Hub
+	hub              Broadcaster
 }
 
-func NewService(repo *Repository, conversationRepo *conversations.Repository, hub *websocket.Hub) *Service {
+func NewService(repo *Repository, conversationRepo *conversations.Repository, hub Broadcaster) *Service {
 	return &Service{
 		repo:             repo,
 		conversationRepo: conversationRepo,
@@ -111,8 +114,19 @@ func (s *Service) SendMessage(
 	}
 
 	event := events.Event{
-		Type:    events.EventMessageCreated,
-		Payload: newMessage,
+		Type: events.EventMessageCreated,
+		Payload: events.MessageCreatedPayload{
+			ID:             newMessage.ID,
+			ConversationID: newMessage.ConversationID,
+			Content:        newMessage.Content,
+			CreatedAt:      newMessage.CreatedAt,
+			Sender: events.MessageCreatedSender{
+				ID:          newMessage.Sender.ID,
+				Username:    newMessage.Sender.Username,
+				DisplayName: newMessage.Sender.DisplayName,
+				AvatarURL:   newMessage.Sender.AvatarURL,
+			},
+		},
 	}
 
 	for _, memberID := range members {

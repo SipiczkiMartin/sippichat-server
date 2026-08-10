@@ -6,6 +6,7 @@ import (
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
 	"github.com/SipiczkiMartin/chat-app/internal/events"
+	"github.com/SipiczkiMartin/chat-app/internal/messages"
 	"github.com/SipiczkiMartin/chat-app/internal/typing"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -13,14 +14,20 @@ import (
 )
 
 type Handler struct {
-	hub    *Hub
-	typing *typing.Service
+	hub      *Hub
+	typing   *typing.Service
+	messages *messages.Service
 }
 
-func NewHandler(hub *Hub, typing *typing.Service) *Handler {
+func NewHandler(
+	hub *Hub,
+	typing *typing.Service,
+	messages *messages.Service,
+) *Handler {
 	return &Handler{
-		hub:    hub,
-		typing: typing,
+		hub:      hub,
+		typing:   typing,
+		messages: messages,
 	}
 }
 
@@ -59,21 +66,49 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		switch event.Type {
-		case events.EventTypingStarted:
+		case events.EventMessageSend:
+			payloadBytes, err := json.Marshal(event.Payload)
+			if err != nil {
+				continue
+			}
 
+			var payload events.SendMessagePayload
+
+			err = json.Unmarshal(payloadBytes, &payload)
+			if err != nil {
+				continue
+			}
+
+			_, err = h.messages.SendMessage(
+				ctx,
+				messages.SendMessageInput{
+					ConversationID: payload.ConversationID,
+					SenderID:       userID,
+					Content:        payload.Content,
+				},
+			)
+
+			if err != nil {
+				continue
+			}
+
+		case events.EventTypingStarted:
 			payloadBytes, err := json.Marshal(event.Payload)
 			if err != nil {
 				continue
 			}
 
 			var payload events.TypingPayload
+
 			err = json.Unmarshal(payloadBytes, &payload)
 			if err != nil {
 				continue
 			}
 
 			err = h.typing.TypingStarted(
-				ctx, userID, payload.ConversationID,
+				ctx,
+				userID,
+				payload.ConversationID,
 			)
 
 			if err != nil {
@@ -81,13 +116,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 
 		case events.EventTypingStopped:
-
 			payloadBytes, err := json.Marshal(event.Payload)
 			if err != nil {
 				continue
 			}
 
 			var payload events.TypingPayload
+
 			err = json.Unmarshal(payloadBytes, &payload)
 			if err != nil {
 				continue
