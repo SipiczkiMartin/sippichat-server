@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
@@ -105,6 +106,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			log.Printf(
+				"WS TYPING STARTED: user=%s conversation=%s",
+				userID,
+				payload.ConversationID,
+			)
+
 			err = h.typing.TypingStarted(
 				ctx,
 				userID,
@@ -137,6 +144,58 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
+
+		case events.EventMessageDelivered:
+			payloadBytes, err := json.Marshal(event.Payload)
+			if err != nil {
+				continue
+			}
+
+			var payload events.MessageDeliveredPayload
+
+			err = json.Unmarshal(payloadBytes, &payload)
+			if err != nil {
+				continue
+			}
+
+			err = h.messages.MarkMessageDelivered(ctx, payload.MessageID, userID)
+			if err != nil {
+				log.Printf(
+					"WS MESSAGE DELIVERED ERROR: user=%s message=%s err=%v",
+					userID, payload.MessageID, err,
+				)
+				continue
+			}
+
+		case events.EventMessageRead:
+			payloadBytes, err := json.Marshal(event.Payload)
+			if err != nil {
+				continue
+			}
+
+			var payload events.MessageReadPayload
+
+			err = json.Unmarshal(payloadBytes, &payload)
+			if err != nil {
+				continue
+			}
+
+			err = h.messages.MarkMessageRead(
+				ctx,
+				payload.MessageID,
+				userID,
+			)
+
+			if err != nil {
+				log.Printf(
+					"WS MESSAGE READ ERROR: user=%s message=%s err=%v",
+					userID,
+					payload.MessageID,
+					err,
+				)
+				continue
+			}
 		}
+
 	}
 }

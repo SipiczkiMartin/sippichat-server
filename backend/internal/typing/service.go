@@ -2,6 +2,7 @@ package typing
 
 import (
 	"context"
+	"log"
 
 	"github.com/SipiczkiMartin/chat-app/internal/events"
 	"github.com/google/uuid"
@@ -36,6 +37,11 @@ func (s *Service) TypingStarted(
 	userID uuid.UUID,
 	conversationID uuid.UUID,
 ) error {
+	log.Printf(
+		"TYPING STARTED: user=%s conversation=%s",
+		userID,
+		conversationID,
+	)
 	conversationUUID := pgtype.UUID{
 		Bytes: conversationID,
 		Valid: true,
@@ -46,15 +52,29 @@ func (s *Service) TypingStarted(
 		return err
 	}
 
+	log.Printf(
+		"TYPING MEMBERS: conversation=%s members=%v",
+		conversationID,
+		members,
+	)
+
 	event := events.Event{
 		Type: events.EventTypingStarted,
 		Payload: events.TypingPayload{
 			ConversationID: conversationID,
+			UserID:         userID,
 		},
 	}
 
 	for _, member := range members {
 		memberUUID := uuid.UUID(member.Bytes)
+
+		log.Printf(
+			"TYPING BROADCAST: sender=%s target=%s",
+			userID,
+			memberUUID,
+		)
+
 		if memberUUID == userID {
 			continue
 		}
@@ -83,6 +103,7 @@ func (s *Service) TypingStopped(
 		Type: events.EventTypingStopped,
 		Payload: events.TypingPayload{
 			ConversationID: conversationID,
+			UserID:         userID,
 		},
 	}
 

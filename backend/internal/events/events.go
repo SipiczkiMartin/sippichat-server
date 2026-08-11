@@ -8,11 +8,13 @@ import (
 
 const (
 	EventMessageCreated = "message.created"
-	EventMessageRead    = "message.read"
 	EventMessageSend    = "message.send"
 
 	EventTypingStarted = "typing.started"
 	EventTypingStopped = "typing.stopped"
+
+	EventMessageDelivered = "message.delivered"
+	EventMessageRead      = "message.read"
 )
 
 type Event struct {
@@ -22,6 +24,7 @@ type Event struct {
 
 type TypingPayload struct {
 	ConversationID uuid.UUID `json:"conversation_id"`
+	UserID         uuid.UUID `json:"user_id"`
 }
 
 type SendMessagePayload struct {
@@ -42,4 +45,12 @@ type MessageCreatedSender struct {
 	Username    string    `json:"username"`
 	DisplayName string    `json:"display_name"`
 	AvatarURL   *string   `json:"avatar_url"`
+}
+
+type MessageDeliveredPayload struct {
+	MessageID uuid.UUID `json:"message_id"`
+}
+
+type MessageReadPayload struct {
+	MessageID uuid.UUID `json:"message_id"`
 }

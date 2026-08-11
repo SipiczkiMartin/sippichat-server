@@ -28,6 +28,12 @@ type Message struct {
 	CreatedAt      pgtype.Timestamptz
 }
 
+type MessageDelivery struct {
+	MessageID   pgtype.UUID
+	UserID      pgtype.UUID
+	DeliveredAt pgtype.Timestamptz
+}
+
 type MessageRead struct {
 	MessageID pgtype.UUID
 	UserID    pgtype.UUID

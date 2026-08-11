@@ -44,6 +44,29 @@ func (q *Queries) GetMessageReaders(ctx context.Context, messageID pgtype.UUID) 
 	return items, nil
 }
 
+const markMessageDelivered = `-- name: MarkMessageDelivered :exec
+INSERT INTO message_deliveries (
+    message_id,
+    user_id
+)
+VALUES (
+    $1,
+    $2
+)
+ON CONFLICT (message_id, user_id)
+DO NOTHING
+`
+
+type MarkMessageDeliveredParams struct {
+	MessageID pgtype.UUID
+	UserID    pgtype.UUID
+}
+
+func (q *Queries) MarkMessageDelivered(ctx context.Context, arg MarkMessageDeliveredParams) error {
+	_, err := q.db.Exec(ctx, markMessageDelivered, arg.MessageID, arg.UserID)
+	return err
+}
+
 const markMessageRead = `-- name: MarkMessageRead :exec
 INSERT INTO message_reads (
     message_id,

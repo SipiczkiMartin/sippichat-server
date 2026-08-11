@@ -102,3 +102,17 @@ func (r *Repository) GetMessageByID(
 ) (db.GetMessageByIDRow, error) {
 	return r.queries.GetMessageByID(ctx, messageID)
 }
+
+func (r *Repository) MarkMessageDelivered(ctx context.Context, messageId pgtype.UUID, userId pgtype.UUID) error {
+	return r.queries.MarkMessageDelivered(ctx, db.MarkMessageDeliveredParams{
+		MessageID: messageId,
+		UserID:    userId,
+	})
+}
+
+func (r *Repository) MarkMessageRead(ctx context.Context, messageId pgtype.UUID, userId pgtype.UUID) error {
+	return r.queries.MarkMessageRead(ctx, db.MarkMessageReadParams{
+		MessageID: messageId,
+		UserID:    userId,
+	})
+}

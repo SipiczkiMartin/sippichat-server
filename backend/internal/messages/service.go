@@ -160,3 +160,104 @@ func (s *Service) ListMessages(
 		limit,
 	)
 }
+
+func (s *Service) MarkMessageDelivered(
+	ctx context.Context,
+	messageId uuid.UUID,
+	userId uuid.UUID,
+) error {
+	messageIDPG := pgtype.UUID{
+		Bytes: messageId,
+		Valid: true,
+	}
+
+	userIDPG := pgtype.UUID{
+		Bytes: userId,
+		Valid: true,
+	}
+
+	message, err := s.repo.GetMessageByID(ctx, messageIDPG)
+	if err != nil {
+		return err
+	}
+
+	isMember, err := s.repo.IsConversationMember(ctx, message.ConversationID, userIDPG)
+	if err != nil {
+		return err
+	}
+
+	if !isMember {
+		return errors.New("user is not a conversation member!")
+	}
+
+	err = s.repo.MarkMessageDelivered(ctx, messageIDPG, userIDPG)
+	if err != nil {
+		return err
+	}
+
+	s.hub.SendToUser(
+		uuid.UUID(message.SenderID.Bytes),
+		events.Event{
+			Type: events.EventMessageDelivered,
+			Payload: events.MessageDeliveredPayload{
+				MessageID: messageId,
+			},
+		},
+	)
+	return nil
+}
+
+func (s *Service) MarkMessageRead(
+	ctx context.Context,
+	messageID uuid.UUID,
+	userID uuid.UUID,
+) error {
+	messageIDPG := pgtype.UUID{
+		Bytes: messageID,
+		Valid: true,
+	}
+
+	userIDPG := pgtype.UUID{
+		Bytes: userID,
+		Valid: true,
+	}
+
+	message, err := s.repo.GetMessageByID(ctx, messageIDPG)
+	if err != nil {
+		return err
+	}
+
+	isMember, err := s.repo.IsConversationMember(
+		ctx,
+		message.ConversationID,
+		userIDPG,
+	)
+	if err != nil {
+		return err
+	}
+
+	if !isMember {
+		return errors.New("user is not a conversation member")
+	}
+
+	err = s.repo.MarkMessageRead(
+		ctx,
+		messageIDPG,
+		userIDPG,
+	)
+	if err != nil {
+		return err
+	}
+
+	s.hub.SendToUser(
+		uuid.UUID(message.SenderID.Bytes),
+		events.Event{
+			Type: events.EventMessageRead,
+			Payload: events.MessageReadPayload{
+				MessageID: messageID,
+			},
+		},
+	)
+
+	return nil
+}
