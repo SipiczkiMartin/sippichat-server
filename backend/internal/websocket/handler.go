@@ -52,6 +52,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.hub.Register(client)
+	client.StartHeartbeat()
 
 	defer func() {
 		h.hub.Unregister(client)
