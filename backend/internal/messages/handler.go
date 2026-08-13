@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -117,6 +118,17 @@ func (h *Handler) CreateMessage(
 	json.NewEncoder(w).Encode(toMessageResponse(message))
 }
 
+type messageCursor struct {
+	CreatedAt time.Time `json:"created_at"`
+	ID        uuid.UUID `json:"id"`
+}
+
+type ListMessagesResponse struct {
+	Messages   []MessageResponse `json:"messages"`
+	NextCursor *string           `json:"next_cursor,omitempty"`
+	HasMore    bool              `json:"has_more"`
+}
+
 func (h *Handler) ListMessages(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -124,7 +136,9 @@ func (h *Handler) ListMessages(
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == uuid.Nil {
 		http.Error(
-			w, "unauthorized", http.StatusUnauthorized,
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
 		)
 		return
 	}
@@ -146,15 +160,55 @@ func (h *Handler) ListMessages(
 
 	if value := r.URL.Query().Get("limit"); value != "" {
 		parsed, err := strconv.Atoi(value)
-		if err == nil && parsed > 0 && parsed <= 100 {
-			limit = int32(parsed)
+		if err != nil || parsed <= 0 || parsed > 100 {
+			http.Error(
+				w,
+				"invalid limit",
+				http.StatusBadRequest,
+			)
+			return
 		}
+
+		limit = int32(parsed)
+	}
+
+	var beforeCreatedAt *time.Time
+	var beforeID *uuid.UUID
+
+	if value := r.URL.Query().Get("before"); value != "" {
+		decoded, err := base64.URLEncoding.DecodeString(value)
+		if err != nil {
+			http.Error(
+				w,
+				"invalid cursor",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		var cursor messageCursor
+
+		if err := json.Unmarshal(decoded, &cursor); err != nil {
+			http.Error(
+				w,
+				"invalid cursor",
+				http.StatusBadRequest,
+			)
+			return
+		}
+
+		beforeCreatedAt = &cursor.CreatedAt
+		beforeID = &cursor.ID
 	}
 
 	messages, err := h.service.ListMessages(
 		r.Context(),
-		conversationID,
-		limit,
+		ListMessagesInput{
+			ConversationID:  conversationID,
+			Limit:           limit,
+			BeforeCreatedAt: beforeCreatedAt,
+			BeforeID:        beforeID,
+		},
 	)
 
 	if err != nil {
@@ -167,11 +221,45 @@ func (h *Handler) ListMessages(
 	}
 
 	responses := make([]MessageResponse, 0, len(messages))
+
 	for _, message := range messages {
-		responses = append(responses, toMessageResponse(message))
+		responses = append(
+			responses,
+			toMessageResponse(message),
+		)
+	}
+
+	response := ListMessagesResponse{
+		Messages: responses,
+		HasMore:  len(messages) == int(limit),
+	}
+
+	if len(messages) > 0 && response.HasMore {
+		oldest := messages[0]
+
+		cursor := messageCursor{
+			CreatedAt: oldest.CreatedAt,
+			ID:        oldest.ID,
+		}
+
+		cursorJSON, err := json.Marshal(cursor)
+		if err != nil {
+			http.Error(
+				w,
+				"internal server error",
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		nextCursor := base64.URLEncoding.EncodeToString(cursorJSON)
+		response.NextCursor = &nextCursor
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(responses)
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return
+	}
 }

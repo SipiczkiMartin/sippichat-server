@@ -119,25 +119,32 @@ SELECT
     m.sender_id,
     m.content,
     m.created_at,
-
     p.username,
     p.display_name,
     p.avatar_url
-
 FROM messages m
-
 JOIN profiles p
     ON p.user_id = m.sender_id
-
 WHERE m.conversation_id = $1
-
-ORDER BY m.created_at ASC
+  AND (
+      $3::timestamptz IS NULL
+      OR (
+          m.created_at,
+          m.id
+      ) < (
+          $3::timestamptz,
+          $4::uuid
+      )
+  )
+ORDER BY m.created_at DESC, m.id DESC
 LIMIT $2
 `
 
 type ListMessagesParams struct {
-	ConversationID pgtype.UUID
-	Limit          int32
+	ConversationID  pgtype.UUID
+	Limit           int32
+	BeforeCreatedAt pgtype.Timestamptz
+	BeforeID        pgtype.UUID
 }
 
 type ListMessagesRow struct {
@@ -152,7 +159,12 @@ type ListMessagesRow struct {
 }
 
 func (q *Queries) ListMessages(ctx context.Context, arg ListMessagesParams) ([]ListMessagesRow, error) {
-	rows, err := q.db.Query(ctx, listMessages, arg.ConversationID, arg.Limit)
+	rows, err := q.db.Query(ctx, listMessages,
+		arg.ConversationID,
+		arg.Limit,
+		arg.BeforeCreatedAt,
+		arg.BeforeID,
+	)
 	if err != nil {
 		return nil, err
 	}

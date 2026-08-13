@@ -55,12 +55,16 @@ func (r *Repository) ListMessages(
 	ctx context.Context,
 	conversationID pgtype.UUID,
 	limit int32,
+	beforeCreatedAt pgtype.Timestamptz,
+	beforeID pgtype.UUID,
 ) ([]Message, error) {
 	rows, err := r.queries.ListMessages(
 		ctx,
 		db.ListMessagesParams{
-			ConversationID: conversationID,
-			Limit:          limit,
+			ConversationID:  conversationID,
+			Limit:           limit,
+			BeforeCreatedAt: beforeCreatedAt,
+			BeforeID:        beforeID,
 		},
 	)
 
@@ -71,7 +75,6 @@ func (r *Repository) ListMessages(
 	messages := make([]Message, 0, len(rows))
 
 	for _, row := range rows {
-
 		message := Message{
 			ID:             uuid.UUID(row.ID.Bytes),
 			ConversationID: uuid.UUID(row.ConversationID.Bytes),

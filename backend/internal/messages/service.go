@@ -3,6 +3,7 @@ package messages
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
 	"github.com/SipiczkiMartin/chat-app/internal/events"
@@ -32,6 +33,13 @@ type SendMessageInput struct {
 	ConversationID uuid.UUID
 	SenderID       uuid.UUID
 	Content        string
+}
+
+type ListMessagesInput struct {
+	ConversationID  uuid.UUID
+	Limit           int32
+	BeforeCreatedAt *time.Time
+	BeforeID        *uuid.UUID
 }
 
 func (s *Service) SendMessage(
@@ -146,18 +154,41 @@ func (s *Service) SendMessage(
 
 func (s *Service) ListMessages(
 	ctx context.Context,
-	conversationID uuid.UUID,
-	limit int32,
+	input ListMessagesInput,
 ) ([]Message, error) {
-	id := pgtype.UUID{
-		Bytes: conversationID,
+	conversationID := pgtype.UUID{
+		Bytes: input.ConversationID,
 		Valid: true,
+	}
+
+	beforeCreatedAt := pgtype.Timestamptz{
+		Valid: false,
+	}
+
+	beforeID := pgtype.UUID{
+		Valid: false,
+	}
+
+	if input.BeforeCreatedAt != nil {
+		beforeCreatedAt = pgtype.Timestamptz{
+			Time:  *input.BeforeCreatedAt,
+			Valid: true,
+		}
+	}
+
+	if input.BeforeID != nil {
+		beforeID = pgtype.UUID{
+			Bytes: *input.BeforeID,
+			Valid: true,
+		}
 	}
 
 	return s.repo.ListMessages(
 		ctx,
-		id,
-		limit,
+		conversationID,
+		input.Limit,
+		beforeCreatedAt,
+		beforeID,
 	)
 }
 

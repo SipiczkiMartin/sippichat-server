@@ -19,19 +19,24 @@ SELECT
     m.sender_id,
     m.content,
     m.created_at,
-
     p.username,
     p.display_name,
     p.avatar_url
-
 FROM messages m
-
 JOIN profiles p
     ON p.user_id = m.sender_id
-
 WHERE m.conversation_id = $1
-
-ORDER BY m.created_at ASC
+  AND (
+      sqlc.narg('before_created_at')::timestamptz IS NULL
+      OR (
+          m.created_at,
+          m.id
+      ) < (
+          sqlc.narg('before_created_at')::timestamptz,
+          sqlc.narg('before_id')::uuid
+      )
+  )
+ORDER BY m.created_at DESC, m.id DESC
 LIMIT $2;
 
 
