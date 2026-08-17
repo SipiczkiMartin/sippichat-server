@@ -1,22 +1,38 @@
-import 'package:sippichat_client/core/network/websocket_client.dart';
+import 'package:flutter/cupertino.dart';
+
+import '../../core/network/websocket_client.dart';
 
 class TypingService {
   final WebsocketClient socket;
 
   TypingService(this.socket);
 
-  void started(String conversationId){
-    socket.send({
-      "type":"typing.started",
-      "conversation_id": conversationId,
-    });
+  int _startedCount = 0;
+
+  void started(String conversationId) {
+    _startedCount++;
+
+    debugPrint(
+      "TYPING SERVICE STARTED "
+          "count=$_startedCount "
+          "conversation=$conversationId "
+          "service=${identityHashCode(this)}",
+    );
+
+    debugPrintStack();
+
+    socket.sendTypingStarted(conversationId);
   }
 
-  void stopped(String conversationId){
-    socket.send({
-      "type":"typing.stopped",
-      "conversation_id": conversationId,
-    });
-  }
+  void stopped(String conversationId) {
+    debugPrint(
+      "TYPING SERVICE STOPPED "
+          "conversation=$conversationId "
+          "service=${identityHashCode(this)}",
+    );
 
+    debugPrintStack();
+
+    socket.sendTypingStopped(conversationId);
+  }
 }

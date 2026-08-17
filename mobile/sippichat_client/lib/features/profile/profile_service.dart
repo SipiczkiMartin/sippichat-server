@@ -2,10 +2,10 @@ import 'package:sippichat_client/core/network/api_client.dart';
 
 import 'model/profile.dart';
 
-class ProfileRepository {
+class ProfileService {
   final ApiClient apiClient;
 
-  ProfileRepository(this.apiClient);
+  ProfileService(this.apiClient);
 
   Future<Profile> getMe() async{
     final response = await apiClient.dio.get("/me");
@@ -18,6 +18,9 @@ class ProfileRepository {
       "display_name": displayName,
       "bio": bio,
     });
+
+    print("PATCH RESPONSE:");
+    print(response);
 
     return Profile.fromJson(response.data);
   }

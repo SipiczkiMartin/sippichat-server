@@ -1,0 +1,117 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+
+# ============================================================
+# Local environment / secrets
+# ============================================================
+
+.env
+.env.*
+!.env.example
+
+# Android local configuration
+/android/local.properties
+/android/key.properties
+
+# iOS local/generated files
+/ios/Flutter/ephemeral/
+/ios/Pods/
+/ios/.symlinks/
+
+# ============================================================
+# Flutter generated files
+# ============================================================
+
+.flutter-plugins
+
+# ============================================================
+# Go / Backend
+# ============================================================
+
+# Go build artifacts
+/bin/
+**/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go test / coverage output
+*.test
+*.out
+coverage.out
+
+# Go workspace
+go.work.sum
+
+# ============================================================
+# Backend local/test files
+# ============================================================
+
+# Local test/debug files
+/backend/test-data.json
+/backend/*.txt
+
+# Local databases
+/backend/*.db
+/backend/*.sqlite
+/backend/*.sqlite3
+
+# ============================================================
+# Docker local overrides
+# ============================================================
+
+docker-compose.override.yml
+
+# ============================================================
+# Temporary files
+# ============================================================
+
+*.tmp
+*.temp
+*~
