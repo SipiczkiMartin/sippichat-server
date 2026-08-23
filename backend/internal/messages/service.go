@@ -3,6 +3,7 @@ package messages
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
@@ -46,6 +47,13 @@ func (s *Service) SendMessage(
 	ctx context.Context,
 	input SendMessageInput,
 ) (Message, error) {
+
+	log.Printf(
+		"SEND MESSAGE: conversation=%s sender=%s content=%q",
+		input.ConversationID,
+		input.SenderID,
+		input.Content,
+	)
 	if input.Content == "" {
 		return Message{}, errors.New("no message content!")
 	}
@@ -67,10 +75,14 @@ func (s *Service) SendMessage(
 	)
 
 	if err != nil {
+		log.Printf("SEND MESSAGE: membership check error: %v", err)
 		return Message{}, err
 	}
 
+	log.Printf("SEND MESSAGE: isMember=%v", isMember)
+
 	if !isMember {
+		log.Printf("SEND MESSAGE ERROR: user is not member")
 		return Message{}, errors.New("user is not a conversation member!")
 	}
 
@@ -82,6 +94,7 @@ func (s *Service) SendMessage(
 	)
 
 	if err != nil {
+		log.Printf("SEND MESSAGE: CreateMessage ERROR: %v", err)
 		return Message{}, err
 	}
 
@@ -93,6 +106,7 @@ func (s *Service) SendMessage(
 	if err != nil {
 		return Message{}, err
 	}
+	log.Printf("SEND MESSAGE: created message=%v", message.ID)
 
 	newMessage := Message{
 		ID:             uuid.UUID(messageDetails.ID.Bytes),
@@ -118,8 +132,11 @@ func (s *Service) SendMessage(
 	)
 
 	if err != nil {
+		log.Printf("SEND MESSAGE: GetMessageByID ERROR: %v", err)
 		return Message{}, err
 	}
+
+	log.Printf("SEND MESSAGE: loaded message=%v", messageDetails.ID)
 
 	event := events.Event{
 		Type: events.EventMessageCreated,
@@ -137,11 +154,23 @@ func (s *Service) SendMessage(
 		},
 	}
 
+	log.Printf(
+		"SEND MESSAGE: broadcasting message=%s to %d members",
+		newMessage.ID,
+		len(members),
+	)
+
 	for _, memberID := range members {
 
 		if !memberID.Valid {
+			log.Printf("SEND MESSAGE: skipping invalid member ID")
 			continue
 		}
+
+		log.Printf(
+			"SEND MESSAGE: SendToUser user=%s",
+			memberID.Bytes,
+		)
 
 		s.hub.SendToUser(
 			memberID.Bytes,

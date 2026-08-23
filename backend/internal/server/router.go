@@ -12,11 +12,28 @@ import (
 	"github.com/SipiczkiMartin/chat-app/internal/users"
 	"github.com/SipiczkiMartin/chat-app/internal/websocket"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	r := chi.NewRouter()
+
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{
+			"http://localhost:*",
+		},
+		AllowedMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
+		},
+		AllowedHeaders: []string{
+			"Accept",
+			"Authorization",
+			"Content-Type",
+		},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	userRepo := users.NewRepository(pool)
 	authRepo := auth.NewRepository(pool)

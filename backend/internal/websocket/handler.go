@@ -69,8 +69,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		switch event.Type {
 		case events.EventMessageSend:
+			log.Printf("WS MESSAGE SEND: user=%s", userID)
+
 			payloadBytes, err := json.Marshal(event.Payload)
 			if err != nil {
+				log.Printf("WS MESSAGE SEND: payload marshall error: %v", err)
 				continue
 			}
 
@@ -78,8 +81,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			err = json.Unmarshal(payloadBytes, &payload)
 			if err != nil {
+				log.Printf("WS MESSAGE SEND: payload unmarshall error: %v", err)
 				continue
 			}
+
+			log.Printf(
+				"WS MESSAGE SEND: conversation=%s content=%q",
+				payload.ConversationID,
+				payload.Content,
+			)
 
 			_, err = h.messages.SendMessage(
 				ctx,
@@ -91,8 +101,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			)
 
 			if err != nil {
+				log.Printf(
+					"WS MESSAGE SEND ERROR: user=%s conversation=%s error=%v",
+					userID,
+					payload.ConversationID,
+					err,
+				)
 				continue
 			}
+			log.Printf("WS MESSAGE SEND: success")
 
 		case events.EventTypingStarted:
 			payloadBytes, err := json.Marshal(event.Payload)

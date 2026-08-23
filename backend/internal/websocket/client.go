@@ -73,11 +73,6 @@ func (c *WSClient) StartHeartbeat() {
 		for {
 			select {
 			case <-ticker.C:
-				log.Printf(
-					"WS HEARTBEAT: pinging user=%s",
-					c.UserID,
-				)
-
 				pingCtx, pingCancel := context.WithTimeout(
 					ctx,
 					heartbeatTimeout,
@@ -102,10 +97,10 @@ func (c *WSClient) StartHeartbeat() {
 					return
 				}
 
-				log.Printf(
-					"WS HEARTBEAT OK: user=%s",
-					c.UserID,
-				)
+				// log.Printf(
+				// 	"WS HEARTBEAT OK: user=%s",
+				// 	c.UserID,
+				// )
 
 			case <-ctx.Done():
 				return
