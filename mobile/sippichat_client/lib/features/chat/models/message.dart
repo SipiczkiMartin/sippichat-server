@@ -1,7 +1,6 @@
 class Message {
   final String id;
   final String conversationId;
-  final String? clientMessageId;
   final String content;
   final DateTime createdAt;
   final Sender sender;
@@ -10,7 +9,6 @@ class Message {
   const Message({
     required this.id,
     required this.conversationId,
-    this.clientMessageId,
     required this.content,
     required this.createdAt,
     required this.sender,
@@ -21,7 +19,6 @@ class Message {
     return Message(
       id: json["id"],
       conversationId: json["conversation_id"],
-      clientMessageId: json["client_message_id"],
       content: json["content"],
       createdAt: DateTime.parse(json["created_at"]),
       sender: Sender.fromJson(
@@ -36,7 +33,6 @@ class Message {
     return Message(
       id: id,
       conversationId: conversationId,
-      clientMessageId: clientMessageId,
       content: content,
       createdAt: createdAt,
       sender: sender,

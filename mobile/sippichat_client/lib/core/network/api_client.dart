@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sippichat_client/core/network/api_config.dart';
 import 'package:sippichat_client/core/storage/token_storage.dart';
 
 class ApiClient {
@@ -12,7 +13,7 @@ class ApiClient {
   ApiClient(this.tokenStorage) {
     dio = Dio(
       BaseOptions(
-        baseUrl: 'http://10.0.2.2:8080',
+        baseUrl: ApiConfig.baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
         headers: {
@@ -179,7 +180,7 @@ class ApiClient {
     // doesn't go through our normal interceptors.
     final refreshClient = Dio(
       BaseOptions(
-        baseUrl: 'http://10.0.2.2:8080',
+        baseUrl: ApiConfig.baseUrl,
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
         headers: {

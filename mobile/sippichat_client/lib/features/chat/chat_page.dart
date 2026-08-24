@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:sippichat_client/app/app_dependencies.dart';
+import 'package:sippichat_client/core/network/api_config.dart';
 import 'package:sippichat_client/features/chat/models/message.dart';
 import 'package:sippichat_client/features/chat/widgets/message_input.dart';
 import 'package:sippichat_client/features/conversations/models/conversation.dart';
@@ -19,7 +20,6 @@ class _ChatPageState extends State<ChatPage> {
   final controller = AppDependencies.chatController;
 
   final ScrollController _scrollController = ScrollController();
-  bool _initialScrollDone = false;
 
   static const Color myMessageColor = Color(0xFFFFE1D8);
   static const Color otherMessageColor = Color(0xFFF5F2F0);
@@ -30,10 +30,26 @@ class _ChatPageState extends State<ChatPage> {
     super.initState();
 
     controller.addListener(_update);
-    _initialScrollDone = false;
 
     controller.clearMessages();
-    controller.loadMessages(widget.conversation.id);
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      await AppDependencies.webSocketService.connect(
+        url: ApiConfig.websocketUrl,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      await controller.loadMessages(widget.conversation.id);
+    } catch (e, stackTrace) {
+      debugPrint("CHAT INIT ERROR: $e");
+      debugPrintStack(stackTrace: stackTrace);
+    }
   }
 
   void _update() {
@@ -43,23 +59,63 @@ class _ChatPageState extends State<ChatPage> {
 
     setState(() {});
 
-    if (!_initialScrollDone &&
-        !controller.loading &&
-        controller.messages.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || _initialScrollDone) {
-          return;
-        }
-
-        if (!_scrollController.hasClients) {
-          return;
-        }
-
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-
-        _initialScrollDone = true;
-      });
+    if (controller.messages.isEmpty) {
+      return;
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+    });
+  }
+
+  void _scrollToBottom() {
+    if (!mounted || !_scrollController.hasClients) {
+      return;
+    }
+
+    final position = _scrollController.position;
+
+    if (!position.hasContentDimensions) {
+      return;
+    }
+
+    // First scroll.
+    _scrollController.jumpTo(position.maxScrollExtent);
+
+    debugPrint(
+      'SCROLL 1 → '
+      'pixels=${position.pixels} '
+      'max=${position.maxScrollExtent} '
+      'viewport=${position.viewportDimension}',
+    );
+
+    // Check again after Flutter has had another frame to lay everything out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) {
+        return;
+      }
+
+      final newPosition = _scrollController.position;
+
+      if (!newPosition.hasContentDimensions) {
+        return;
+      }
+
+      debugPrint(
+        'SCROLL 2 → '
+        'pixels=${newPosition.pixels} '
+        'max=${newPosition.maxScrollExtent}',
+      );
+
+      if (newPosition.pixels != newPosition.maxScrollExtent) {
+        _scrollController.jumpTo(newPosition.maxScrollExtent);
+
+        debugPrint(
+          'SCROLL CORRECTED → '
+          '${newPosition.maxScrollExtent}',
+        );
+      }
+    });
   }
 
   @override
@@ -85,7 +141,29 @@ class _ChatPageState extends State<ChatPage> {
       body: Column(
         children: [
           Expanded(child: _buildMessageList(messages)),
-          MessageInput(conversationId: widget.conversation.id),
+
+          if (controller.isOtherUserTyping)
+            const Padding(
+              padding: EdgeInsets.only(left: 16, right: 16, bottom: 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'typing...',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
+            ),
+
+          MessageInput(
+            conversationId: widget.conversation.id,
+            onSend: controller.sendMessage,
+            onTypingStart: controller.sendTypingStart,
+            onTypingStop: controller.sendTypingStop,
+          ),
         ],
       ),
     );
@@ -180,9 +258,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
               ),
             ),
           ),
-
           const SizedBox(height: 5),
-
           Container(
             constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.75,
@@ -206,7 +282,6 @@ class _MessageBubbleState extends State<_MessageBubble> {
                   widget.message.content,
                   style: const TextStyle(fontSize: 15, height: 1.4),
                 ),
-
                 if (widget.isMine) ...[
                   const SizedBox(height: 4),
                   _MessageStatus(status: widget.message.status),

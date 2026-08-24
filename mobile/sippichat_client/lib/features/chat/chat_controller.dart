@@ -1,28 +1,98 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
+import 'package:sippichat_client/core/network/socket/websocket_service.dart';
 import 'package:sippichat_client/features/chat/chat_service.dart';
 import 'package:sippichat_client/features/chat/models/message.dart';
 
 class ChatController extends ChangeNotifier {
   final ChatService chatService;
+  final WebSocketService webSocketService;
 
-  ChatController(this.chatService);
+  StreamSubscription<Map<String, dynamic>>? _websocketSubscription;
+
+  ChatController(this.chatService, this.webSocketService) {
+    _websocketSubscription = webSocketService.events.listen(
+      _handleWebSocketEvent,
+    );
+  }
 
   List<Message> messages = [];
+
   bool loading = false;
+  bool loadingMore = false;
+  bool hasMoreMessages = true;
+  bool isOtherUserTyping = false;
+
   String? error;
   String? currentConversationId;
-  bool hasMoreMessages = true;
-  bool loadingMore = false;
   String? _nextCursor;
+
+  void _handleWebSocketEvent(Map<String, dynamic> event) {
+    final type = event['type'];
+
+    debugPrint('CHAT WS EVENT: $type');
+
+    final payload = event['payload'];
+
+    if (payload is! Map<String, dynamic>) {
+      return;
+    }
+
+    switch (type){
+      case 'message.created':
+        _handleMessageCreated(payload);
+        break;
+      case 'typing.started':
+        _handleTypingStarted(payload);
+        break;
+      case 'typing.stopped':
+        _handleTypingStopped(payload);
+        break;
+    }
+  }
+
+  void _handleMessageCreated(Map<String,dynamic> payload){
+    final message = Message.fromJson(payload);
+    if(message.conversationId != currentConversationId){
+      return;
+    }
+
+    addMessage(message);
+  }
+
+  void _handleTypingStarted(Map<String,dynamic> payload){
+    final conversationId = payload['conversation_id'];
+
+    if(conversationId != currentConversationId){
+      return;
+    }
+
+    isOtherUserTyping = true;
+    debugPrint('Typing: started');
+    notifyListeners();
+  }
+
+  void _handleTypingStopped(Map<String,dynamic> payload){
+    final conversationId = payload['conversation_id'];
+
+    if(conversationId != currentConversationId){
+      return;
+    }
+
+    isOtherUserTyping = false;
+    debugPrint('Typing: stopped');
+    notifyListeners();
+  }
 
   Future<void> loadMessages(String conversationId) async {
     currentConversationId = conversationId;
+
     loading = true;
     loadingMore = false;
     hasMoreMessages = true;
     _nextCursor = null;
     error = null;
-
     messages = [];
 
     notifyListeners();
@@ -39,7 +109,7 @@ class ChatController extends ChangeNotifier {
       hasMoreMessages = page.hasMore;
       _nextCursor = page.nextCursor;
     } catch (e, stackTrace) {
-      debugPrint("ERROR loading messages: $e");
+      debugPrint('ERROR loading messages: $e');
       debugPrintStack(stackTrace: stackTrace);
 
       if (currentConversationId == conversationId) {
@@ -50,6 +120,74 @@ class ChatController extends ChangeNotifier {
         loading = false;
         notifyListeners();
       }
+    }
+  }
+
+  void sendMessage(String content) {
+    final conversationId = currentConversationId;
+
+    if (conversationId == null) {
+      return;
+    }
+
+    final trimmedContent = content.trim();
+
+    if (trimmedContent.isEmpty) {
+      return;
+    }
+
+    if (!webSocketService.isConnected) {
+      debugPrint('WS: cannot send message, socket not connected');
+      return;
+    }
+
+    webSocketService.send(
+      type: 'message.send',
+      payload: {'conversation_id': conversationId, 'content': trimmedContent},
+    );
+  }
+
+  Future<void> loadOlderMessages() async {
+    final conversationId = currentConversationId;
+
+    if (conversationId == null ||
+        !hasMoreMessages ||
+        loadingMore ||
+        _nextCursor == null) {
+      return;
+    }
+
+    loadingMore = true;
+    notifyListeners();
+
+    try {
+      final page = await chatService.getMessages(
+        conversationId,
+        before: _nextCursor,
+      );
+
+      if (currentConversationId != conversationId) {
+        return;
+      }
+
+      final existingIds = messages.map((message) => message.id).toSet();
+
+      final olderMessages = page.messages
+          .where((message) => !existingIds.contains(message.id))
+          .toList();
+
+      messages = [...olderMessages, ...messages];
+
+      hasMoreMessages = page.hasMore;
+      _nextCursor = page.nextCursor;
+    } catch (e, stackTrace) {
+      debugPrint('ERROR loading older messages: $e');
+      debugPrintStack(stackTrace: stackTrace);
+
+      error = e.toString();
+    } finally {
+      loadingMore = false;
+      notifyListeners();
     }
   }
 
@@ -79,69 +217,6 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadOlderMessages() async {
-    final conversationId = currentConversationId;
-
-    if (conversationId == null) {
-      return;
-    }
-
-    if (!hasMoreMessages || loadingMore) {
-      return;
-    }
-
-    final cursor = _nextCursor;
-
-    if (cursor == null) {
-      return;
-    }
-
-    loadingMore = true;
-    notifyListeners();
-
-    try {
-      final page = await chatService.getMessages(
-        conversationId,
-        before: cursor,
-      );
-
-      if (currentConversationId != conversationId) {
-        return;
-      }
-
-      final existingIds = messages.map((message) => message.id).toSet();
-
-      final olderMessages = page.messages
-          .where((message) => !existingIds.contains(message.id))
-          .toList();
-
-      messages = [...olderMessages, ...messages];
-
-      hasMoreMessages = page.hasMore;
-      _nextCursor = page.nextCursor;
-    } catch (e, stackTrace) {
-      debugPrint("ERROR loading older messages: $e");
-      debugPrintStack(stackTrace: stackTrace);
-
-      error = e.toString();
-    } finally {
-      loadingMore = false;
-      notifyListeners();
-    }
-  }
-
-  void clearMessages() {
-    currentConversationId = null;
-    messages = [];
-    error = null;
-
-    hasMoreMessages = true;
-    loadingMore = false;
-    _nextCursor = null;
-
-    notifyListeners();
-  }
-
   void addMessage(Message message) {
     if (messages.any((item) => item.id == message.id)) {
       return;
@@ -150,8 +225,43 @@ class ChatController extends ChangeNotifier {
     _mergeMessages([message]);
   }
 
+  void sendTypingStart(String conversationId) {
+    if (!webSocketService.isConnected) {
+      return;
+    }
+
+    webSocketService.send(
+      type: 'typing.started',
+      payload: {'conversation_id': conversationId},
+    );
+  }
+
+  void sendTypingStop(String conversationId) {
+    if (!webSocketService.isConnected) {
+      return;
+    }
+
+    webSocketService.send(
+      type: 'typing.stopped',
+      payload: {'conversation_id': conversationId},
+    );
+  }
+
+  void clearMessages() {
+    currentConversationId = null;
+    messages = [];
+    error = null;
+    hasMoreMessages = true;
+    loadingMore = false;
+    _nextCursor = null;
+    isOtherUserTyping = false;
+
+    notifyListeners();
+  }
+
   @override
   void dispose() {
+    _websocketSubscription?.cancel();
     super.dispose();
   }
 }
