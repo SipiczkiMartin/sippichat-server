@@ -28,16 +28,28 @@ type TypingPayload struct {
 }
 
 type SendMessagePayload struct {
-	ConversationID uuid.UUID `json:"conversation_id"`
-	Content        string    `json:"content"`
+	ConversationID uuid.UUID               `json:"conversation_id"`
+	Content        string                  `json:"content"`
+	Attachments    []SendAttachmentPayload `json:"attachments"`
+}
+
+type SendAttachmentPayload struct {
+	Type        string         `json:"type"`
+	ExternalURL *string        `json:"external_url,omitempty"`
+	Filename    *string        `json:"filename,omitempty"`
+	StorageKey  *string        `json:"storage_key"`
+	MimeType    *string        `json:"mime_type,omitempty"`
+	Size        *int64         `json:"size,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 type MessageCreatedPayload struct {
-	ID             uuid.UUID            `json:"id"`
-	ConversationID uuid.UUID            `json:"conversation_id"`
-	Content        string               `json:"content"`
-	CreatedAt      time.Time            `json:"created_at"`
-	Sender         MessageCreatedSender `json:"sender"`
+	ID             uuid.UUID                  `json:"id"`
+	ConversationID uuid.UUID                  `json:"conversation_id"`
+	Content        string                     `json:"content"`
+	CreatedAt      time.Time                  `json:"created_at"`
+	Sender         MessageCreatedSender       `json:"sender"`
+	Attachments    []MessageCreatedAttachment `json:"attachments"`
 }
 
 type MessageCreatedSender struct {
@@ -53,4 +65,16 @@ type MessageDeliveredPayload struct {
 
 type MessageReadPayload struct {
 	MessageID uuid.UUID `json:"message_id"`
+}
+
+type MessageCreatedAttachment struct {
+	ID          uuid.UUID      `json:"id"`
+	Type        string         `json:"type"`
+	Filename    *string        `json:"filename,omitempty"`
+	MimeType    *string        `json:"mime_type,omitempty"`
+	Size        *int64         `json:"size,omitempty"`
+	StorageKey  *string        `json:"storage_key,omitempty"`
+	ExternalURL string         `json:"external_url,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
+	SortOrder   int            `json:"sort_order"`
 }

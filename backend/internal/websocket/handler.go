@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
@@ -18,31 +19,43 @@ type Handler struct {
 	hub      *Hub
 	typing   *typing.Service
 	messages *messages.Service
+	secret   string
 }
 
 func NewHandler(
 	hub *Hub,
 	typing *typing.Service,
 	messages *messages.Service,
+	secret string,
 ) *Handler {
 	return &Handler{
 		hub:      hub,
 		typing:   typing,
 		messages: messages,
+		secret:   secret,
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	userID := auth.UserIDFromContext(r.Context())
 	ctx := r.Context()
+	userID, err := userIDFromWebSocket(r, h.secret)
 
-	if userID == uuid.Nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	if err != nil || userID == uuid.Nil {
+		http.Error(
+			w,
+			"unauthorized",
+			http.StatusUnauthorized,
+		)
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{
+			"localhost:*",
+		},
+	})
 	if err != nil {
+		log.Printf("WS ACCEPT ERROR: %v", err)
 		return
 	}
 
@@ -91,12 +104,44 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				payload.Content,
 			)
 
+			attachments := make([]messages.AttachmentInput, 0, len(payload.Attachments))
+
+			for index, attachment := range payload.Attachments {
+				var metadata []byte
+
+				if attachment.Metadata != nil {
+					metadata, err = json.Marshal(attachment.Metadata)
+					if err != nil {
+						log.Printf(
+							"WS MESSAGE SEND: attachment metadata marshal error: %v",
+							err,
+						)
+						continue
+					}
+				}
+
+				attachments = append(
+					attachments,
+					messages.AttachmentInput{
+						Type:        attachment.Type,
+						ExternalURL: attachment.ExternalURL,
+						Filename:    attachment.Filename,
+						MimeType:    attachment.MimeType,
+						Size:        attachment.Size,
+						StorageKey:  attachment.StorageKey,
+						Metadata:    metadata,
+						SortOrder:   index,
+					},
+				)
+			}
+
 			_, err = h.messages.SendMessage(
 				ctx,
 				messages.SendMessageInput{
 					ConversationID: payload.ConversationID,
 					SenderID:       userID,
 					Content:        payload.Content,
+					Attachments:    attachments,
 				},
 			)
 
@@ -216,4 +261,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 	}
+}
+
+func userIDFromWebSocket(
+	r *http.Request,
+	secret string,
+) (uuid.UUID, error) {
+	token := r.URL.Query().Get("token")
+
+	if token == "" {
+		return uuid.Nil, fmt.Errorf(
+			"missing websocket token",
+		)
+	}
+
+	return auth.ParseAccessToken(
+		token,
+		secret,
+	)
 }

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
@@ -8,7 +9,9 @@ import (
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
 	"github.com/SipiczkiMartin/chat-app/internal/messages"
 	"github.com/SipiczkiMartin/chat-app/internal/readreceipts"
+	"github.com/SipiczkiMartin/chat-app/internal/storage"
 	"github.com/SipiczkiMartin/chat-app/internal/typing"
+	"github.com/SipiczkiMartin/chat-app/internal/uploads"
 	"github.com/SipiczkiMartin/chat-app/internal/users"
 	"github.com/SipiczkiMartin/chat-app/internal/websocket"
 	"github.com/go-chi/chi/v5"
@@ -35,6 +38,23 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 		MaxAge:           300,
 	}))
 
+	objectStorage, err := storage.NewMinIOStorage(
+		cfg.StorageEndpoint,
+		cfg.StorageAccessKey,
+		cfg.StorageSecretKey,
+		cfg.StorageBucket,
+		cfg.StorageUseSSL,
+		cfg.StoragePublicURL,
+	)
+
+	if err != nil {
+		panic(err)
+	}
+
+	if err := objectStorage.EnsureBucket(context.Background()); err != nil {
+		panic(err)
+	}
+
 	userRepo := users.NewRepository(pool)
 	authRepo := auth.NewRepository(pool)
 	userService := users.NewService(userRepo, authRepo, cfg.JWTSecret)
@@ -51,7 +71,7 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	messageHandler := messages.NewHandler(messageService)
 
 	typingService := typing.NewService(conversationRepo, hub)
-	wsHandler := websocket.NewHandler(hub, typingService, messageService)
+	wsHandler := websocket.NewHandler(hub, typingService, messageService, cfg.JWTSecret)
 
 	readReceiptRepo := readreceipts.NewRepository(pool)
 	readReceiptService := readreceipts.NewService(
@@ -62,6 +82,9 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	)
 	readReceiptHandler := readreceipts.NewHanler(readReceiptService)
 
+	uploadService := uploads.NewService(objectStorage)
+	uploadHandler := uploads.NewHandler(uploadService)
+
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
 	})
@@ -71,9 +94,10 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	r.Post("/auth/refresh", userHandler.RefreshToken)
 	r.Post("/auth/logout", userHandler.Logout)
 
+	r.Get("/ws", wsHandler.ServeHTTP)
+
 	r.Group(func(r chi.Router) {
 		r.Use(auth.JWTMiddleware(cfg.JWTSecret))
-		r.Get("/ws", wsHandler.ServeHTTP)
 		r.Get("/me", userHandler.Me)
 		r.Patch("/me", userHandler.UpdateMe)
 		r.Post("/auth/logout-all", userHandler.LogoutAll)
@@ -86,6 +110,10 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 
 		r.Post("/messages/{messageID}/read", readReceiptHandler.MarkRead)
 		r.Get("/users/search", userHandler.Search)
+
+		r.Post("/uploads", uploadHandler.Upload)
+		r.Get("/uploads/attachments/{filename}", uploadHandler.Download)
+
 	})
 
 	return r

@@ -2,6 +2,7 @@ package messages
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"time"
@@ -34,6 +35,7 @@ type SendMessageInput struct {
 	ConversationID uuid.UUID
 	SenderID       uuid.UUID
 	Content        string
+	Attachments    []AttachmentInput
 }
 
 type ListMessagesInput struct {
@@ -54,8 +56,9 @@ func (s *Service) SendMessage(
 		input.SenderID,
 		input.Content,
 	)
-	if input.Content == "" {
-		return Message{}, errors.New("no message content!")
+
+	if input.Content == "" && len(input.Attachments) == 0 {
+		return Message{}, errors.New("message must contain text or an attachment")
 	}
 
 	conversationID := pgtype.UUID{
@@ -98,6 +101,25 @@ func (s *Service) SendMessage(
 		return Message{}, err
 	}
 
+	for _, attachment := range input.Attachments {
+		_, err := s.repo.CreateAttachment(
+			ctx,
+			pgtype.UUID{
+				Bytes: message.ID.Bytes,
+				Valid: true,
+			},
+			attachment,
+		)
+
+		if err != nil {
+			log.Printf(
+				"SEND MESSAGE: CreateAttachment ERROR: %v",
+				err,
+			)
+			return Message{}, err
+		}
+	}
+
 	messageDetails, err := s.repo.GetMessageByID(
 		ctx,
 		message.ID,
@@ -108,11 +130,25 @@ func (s *Service) SendMessage(
 	}
 	log.Printf("SEND MESSAGE: created message=%v", message.ID)
 
+	attachments, err := s.repo.ListAttachmentsByMessageID(
+		ctx,
+		message.ID,
+	)
+
+	if err != nil {
+		log.Printf(
+			"SEND MESSAGE: ListAttachmentsByMessageID ERROR: %v",
+			err,
+		)
+		return Message{}, err
+	}
+
 	newMessage := Message{
 		ID:             uuid.UUID(messageDetails.ID.Bytes),
 		ConversationID: uuid.UUID(messageDetails.ConversationID.Bytes),
 		Content:        messageDetails.Content,
 		CreatedAt:      messageDetails.CreatedAt.Time,
+		Attachments:    attachments,
 
 		Sender: Sender{
 			ID:          uuid.UUID(messageDetails.SenderID.Bytes),
@@ -138,6 +174,41 @@ func (s *Service) SendMessage(
 
 	log.Printf("SEND MESSAGE: loaded message=%v", messageDetails.ID)
 
+	eventAttachments := make(
+		[]events.MessageCreatedAttachment,
+		0,
+		len(newMessage.Attachments),
+	)
+
+	for _, attachment := range newMessage.Attachments {
+		var metadata map[string]any
+
+		if len(attachment.Metadata) > 0 {
+			if err := json.Unmarshal(attachment.Metadata, &metadata); err != nil {
+				log.Printf(
+					"SEND MESSAGE: invalid attachment metadata: %v",
+					err,
+				)
+				return Message{}, err
+			}
+		}
+
+		eventAttachments = append(
+			eventAttachments,
+			events.MessageCreatedAttachment{
+				ID:          attachment.ID,
+				Type:        attachment.Type,
+				Filename:    attachment.Filename,
+				MimeType:    attachment.MimeType,
+				Size:        attachment.Size,
+				StorageKey:  attachment.StorageKey,
+				ExternalURL: attachment.ExternalURL,
+				Metadata:    metadata,
+				SortOrder:   attachment.SortOrder,
+			},
+		)
+	}
+
 	event := events.Event{
 		Type: events.EventMessageCreated,
 		Payload: events.MessageCreatedPayload{
@@ -151,6 +222,7 @@ func (s *Service) SendMessage(
 				DisplayName: newMessage.Sender.DisplayName,
 				AvatarURL:   newMessage.Sender.AvatarURL,
 			},
+			Attachments: eventAttachments,
 		},
 	}
 

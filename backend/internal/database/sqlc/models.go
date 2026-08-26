@@ -8,6 +8,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Attachment struct {
+	ID          pgtype.UUID
+	MessageID   pgtype.UUID
+	Type        string
+	Filename    pgtype.Text
+	MimeType    pgtype.Text
+	Size        pgtype.Int8
+	StorageKey  pgtype.Text
+	ExternalUrl pgtype.Text
+	Metadata    []byte
+	SortOrder   int32
+	CreatedAt   pgtype.Timestamptz
+}
+
 type Conversation struct {
 	ID        pgtype.UUID
 	Type      string

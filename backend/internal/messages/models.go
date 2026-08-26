@@ -12,6 +12,7 @@ type Message struct {
 	Content        string
 	CreatedAt      time.Time
 	Sender         Sender
+	Attachments    []Attachment
 }
 
 type Sender struct {

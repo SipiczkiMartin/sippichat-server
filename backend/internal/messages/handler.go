@@ -27,11 +27,24 @@ type createMessageRequest struct {
 }
 
 type MessageResponse struct {
-	ID             string         `json:"id"`
-	ConversationID string         `json:"conversation_id"`
-	Content        string         `json:"content"`
-	CreatedAt      time.Time      `json:"created_at"`
-	Sender         SenderResponse `json:"sender"`
+	ID             string               `json:"id"`
+	ConversationID string               `json:"conversation_id"`
+	Content        string               `json:"content"`
+	CreatedAt      time.Time            `json:"created_at"`
+	Sender         SenderResponse       `json:"sender"`
+	Attachments    []AttachmentResponse `json:"attachments"`
+}
+
+type AttachmentResponse struct {
+	ID          string  `json:"id"`
+	Type        string  `json:"type"`
+	Filename    *string `json:"filename,omitempty"`
+	MimeType    *string `json:"mime_type,omitempty"`
+	Size        *int64  `json:"size,omitempty"`
+	StorageKey  *string `json:"storage_key,omitempty"`
+	ExternalURL string  `json:"external_url,omitempty"`
+	Metadata    []byte  `json:"metadata,omitempty"`
+	SortOrder   int     `json:"sort_order"`
 }
 
 type SenderResponse struct {
@@ -42,11 +55,35 @@ type SenderResponse struct {
 }
 
 func toMessageResponse(message Message) MessageResponse {
+	attachments := make(
+		[]AttachmentResponse,
+		0,
+		len(message.Attachments),
+	)
+
+	for _, attachment := range message.Attachments {
+		attachments = append(
+			attachments,
+			AttachmentResponse{
+				ID:          attachment.ID.String(),
+				Type:        attachment.Type,
+				Filename:    attachment.Filename,
+				MimeType:    attachment.MimeType,
+				Size:        attachment.Size,
+				StorageKey:  attachment.StorageKey,
+				ExternalURL: attachment.ExternalURL,
+				Metadata:    attachment.Metadata,
+				SortOrder:   attachment.SortOrder,
+			},
+		)
+	}
+
 	return MessageResponse{
 		ID:             message.ID.String(),
 		ConversationID: message.ConversationID.String(),
 		Content:        message.Content,
 		CreatedAt:      message.CreatedAt,
+		Attachments:    attachments,
 
 		Sender: SenderResponse{
 			ID:          message.Sender.ID.String(),

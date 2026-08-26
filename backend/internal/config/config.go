@@ -16,6 +16,13 @@ type Config struct {
 	DBSSLMode  string
 
 	JWTSecret string
+
+	StorageEndpoint  string
+	StorageAccessKey string
+	StorageSecretKey string
+	StorageBucket    string
+	StorageUseSSL    bool
+	StoragePublicURL string
 }
 
 func Load() Config {
@@ -30,6 +37,16 @@ func Load() Config {
 		DBSSLMode:  getEnv("DB_SSLMODE", "disable"),
 
 		JWTSecret: getEnv("JWT_SECRET", ""),
+
+		StorageEndpoint:  getEnv("STORAGE_ENDPOINT", "localhost:9000"),
+		StorageAccessKey: getEnv("STORAGE_ACCESS_KEY", "minioadmin"),
+		StorageSecretKey: getEnv("STORAGE_SECRET_KEY", "minioadmin"),
+		StorageBucket:    getEnv("STORAGE_BUCKET", "chat-attachments"),
+		StorageUseSSL:    getEnv("STORAGE_USE_SSL", "false") == "true",
+		StoragePublicURL: getEnv(
+			"STORAGE_PUBLIC_URL",
+			"http://localhost:9000",
+		),
 	}
 }
 
