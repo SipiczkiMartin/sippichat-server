@@ -91,7 +91,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (TokenResul
 
 	tokens, err := s.issueTokens(ctx, user, txAuthRepo)
 	if err != nil {
-		return TokenResult{}, nil
+		return TokenResult{}, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {

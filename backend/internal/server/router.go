@@ -8,6 +8,7 @@ import (
 	"github.com/SipiczkiMartin/chat-app/internal/config"
 	"github.com/SipiczkiMartin/chat-app/internal/conversations"
 	"github.com/SipiczkiMartin/chat-app/internal/messages"
+	"github.com/SipiczkiMartin/chat-app/internal/middleware"
 	"github.com/SipiczkiMartin/chat-app/internal/readreceipts"
 	"github.com/SipiczkiMartin/chat-app/internal/storage"
 	"github.com/SipiczkiMartin/chat-app/internal/typing"
@@ -21,6 +22,8 @@ import (
 
 func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	r := chi.NewRouter()
+
+	rateLimiter := middleware.NewRateLimitMiddleware()
 
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: []string{
@@ -67,11 +70,20 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	hub := websocket.NewHub()
 
 	messageRepo := messages.NewRepository(pool)
-	messageService := messages.NewService(messageRepo, conversationRepo, hub)
+	messageService := messages.NewService(
+		messageRepo,
+		conversationRepo,
+		hub,
+	)
 	messageHandler := messages.NewHandler(messageService)
 
 	typingService := typing.NewService(conversationRepo, hub)
-	wsHandler := websocket.NewHandler(hub, typingService, messageService, cfg.JWTSecret)
+	wsHandler := websocket.NewHandler(
+		hub,
+		typingService,
+		messageService,
+		cfg.JWTSecret,
+	)
 
 	readReceiptRepo := readreceipts.NewRepository(pool)
 	readReceiptService := readreceipts.NewService(
@@ -89,31 +101,76 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 		w.Write([]byte("OK"))
 	})
 
-	r.Post("/auth/register", userHandler.Register)
-	r.Post("/auth/login", userHandler.Login)
-	r.Post("/auth/refresh", userHandler.RefreshToken)
-	r.Post("/auth/logout", userHandler.Logout)
+	// Public authentication routes.
+	r.With(rateLimiter.Register).Post(
+		"/auth/register",
+		userHandler.Register,
+	)
+
+	r.With(rateLimiter.Login).Post(
+		"/auth/login",
+		userHandler.Login,
+	)
+
+	r.With(rateLimiter.Refresh).Post(
+		"/auth/refresh",
+		userHandler.RefreshToken,
+	)
+
+	r.Post(
+		"/auth/logout",
+		userHandler.Logout,
+	)
 
 	r.Get("/ws", wsHandler.ServeHTTP)
 
+	// Authenticated routes.
 	r.Group(func(r chi.Router) {
 		r.Use(auth.JWTMiddleware(cfg.JWTSecret))
+
 		r.Get("/me", userHandler.Me)
 		r.Patch("/me", userHandler.UpdateMe)
 		r.Post("/auth/logout-all", userHandler.LogoutAll)
 
-		r.Post("/conversations", conversationHandler.CreateConversation)
-		r.Get("/conversations", conversationHandler.ListConversations)
+		r.Post(
+			"/conversations",
+			conversationHandler.CreateConversation,
+		)
 
-		r.Post("/conversations/{conversationID}/messages", messageHandler.CreateMessage)
-		r.Get("/conversations/{conversationID}/messages", messageHandler.ListMessages)
+		r.Get(
+			"/conversations",
+			conversationHandler.ListConversations,
+		)
 
-		r.Post("/messages/{messageID}/read", readReceiptHandler.MarkRead)
-		r.Get("/users/search", userHandler.Search)
+		r.With(rateLimiter.Messages).Post(
+			"/conversations/{conversationID}/messages",
+			messageHandler.CreateMessage,
+		)
 
-		r.Post("/uploads", uploadHandler.Upload)
-		r.Get("/uploads/attachments/{filename}", uploadHandler.Download)
+		r.Get(
+			"/conversations/{conversationID}/messages",
+			messageHandler.ListMessages,
+		)
 
+		r.Post(
+			"/messages/{messageID}/read",
+			readReceiptHandler.MarkRead,
+		)
+
+		r.Get(
+			"/users/search",
+			userHandler.Search,
+		)
+
+		r.With(rateLimiter.Uploads).Post(
+			"/uploads",
+			uploadHandler.Upload,
+		)
+
+		r.Get(
+			"/uploads/attachments/{filename}",
+			uploadHandler.Download,
+		)
 	})
 
 	return r
