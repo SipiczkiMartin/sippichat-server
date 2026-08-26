@@ -11,6 +11,75 @@ import 'package:sippichat_client/features/conversations/models/conversation.dart
 
 import 'models/attachment.dart';
 
+// =============================================================================
+// Image cache
+// =============================================================================
+//
+// Shared by all message attachment widgets in this ChatPage file.
+//
+// Images are downloaded once and kept in memory. Scrolling away from an image
+// and then back to it does not trigger another HTTP request.
+//
+// In-flight downloads are also shared so two widgets requesting the same image
+// at the same time use the same Future.
+//
+
+class _AttachmentImageCache {
+  static final Map<String, Uint8List> _cache = {};
+
+  static final Map<String, Future<Uint8List>> _loading = {};
+
+  static Uint8List? get(String storageKey) {
+    return _cache[storageKey];
+  }
+
+  static Future<Uint8List> load(String storageKey) {
+    final cached = _cache[storageKey];
+
+    if (cached != null) {
+      return Future.value(cached);
+    }
+
+    final existingRequest = _loading[storageKey];
+
+    if (existingRequest != null) {
+      return existingRequest;
+    }
+
+    final future = _download(storageKey);
+
+    _loading[storageKey] = future;
+
+    future.whenComplete(() {
+      _loading.remove(storageKey);
+    });
+
+    return future;
+  }
+
+  static Future<Uint8List> _download(String storageKey) async {
+    final bytes = await AppDependencies.apiClient.downloadFile(storageKey);
+
+    final imageBytes = Uint8List.fromList(bytes);
+
+    _cache[storageKey] = imageBytes;
+
+    return imageBytes;
+  }
+
+  static void clear() {
+    _cache.clear();
+  }
+
+  static void remove(String storageKey) {
+    _cache.remove(storageKey);
+  }
+}
+
+// =============================================================================
+// Chat page
+// =============================================================================
+
 class ChatPage extends StatefulWidget {
   final Conversation conversation;
 
@@ -25,6 +94,18 @@ class _ChatPageState extends State<ChatPage> {
 
   final ScrollController _scrollController = ScrollController();
 
+  final Set<String> _readMessageIds = {};
+
+  // ID of the newest message currently known by the page.
+  //
+  // This is important because controller.notifyListeners() also fires for
+  // delivered/read status changes. We do NOT want those status changes to
+  // make the chat jump.
+  String? _lastMessageId;
+
+  // Prevent multiple post-frame scroll requests from stacking up.
+  bool _scrollScheduled = false;
+
   static const Color myMessageColor = Color(0xFFFFE1D8);
   static const Color otherMessageColor = Color(0xFFF5F2F0);
   static const Color messageBorderColor = Color(0xFFE8C5BB);
@@ -35,9 +116,16 @@ class _ChatPageState extends State<ChatPage> {
 
     controller.addListener(_update);
 
+    _scrollController.addListener(_onScroll);
+
     controller.clearMessages();
+
     _initialize();
   }
+
+  // ===========================================================================
+  // Initialization
+  // ===========================================================================
 
   Future<void> _initialize() async {
     try {
@@ -50,24 +138,116 @@ class _ChatPageState extends State<ChatPage> {
       }
 
       await controller.loadMessages(widget.conversation.id);
+
+      if (!mounted) {
+        return;
+      }
+
+      // Remember the newest message loaded from the server.
+      _lastMessageId = _getNewestMessageId();
+
+      _scheduleScrollToBottom();
     } catch (e, stackTrace) {
       debugPrint('CHAT INIT ERROR: $e');
       debugPrintStack(stackTrace: stackTrace);
     }
   }
 
+  // ===========================================================================
+  // Message updates
+  // ===========================================================================
+
   void _update() {
     if (!mounted) {
       return;
     }
 
+    final messages = controller.messages;
+
+    final newestMessageId = _getNewestMessageId();
+
+    // Detect an actually NEWEST message.
+    //
+    // This catches:
+    //
+    // - our sent message arriving through WebSocket
+    // - a received message arriving through WebSocket
+    //
+    // It does NOT fire for:
+    //
+    // - delivered status
+    // - read status
+    // - loading older messages
+    //
+    final bool hasNewMessage =
+        messages.isNotEmpty &&
+        _lastMessageId != null &&
+        newestMessageId != null &&
+        newestMessageId != _lastMessageId;
+
+    // Initial population is handled separately below.
+    final bool initialMessagesLoaded =
+        _lastMessageId == null && messages.isNotEmpty;
+
+    _lastMessageId = newestMessageId;
+
     setState(() {});
 
-    if (controller.messages.isEmpty) {
+    if (messages.isEmpty) {
       return;
     }
 
+    // Initial message load.
+    if (initialMessagesLoaded) {
+      _scheduleScrollToBottom();
+    }
+
+    // A new message was appended.
+    //
+    // This is the important part that fixes received messages not jumping
+    // to the bottom.
+    if (hasNewMessage) {
+      _scheduleScrollToBottom();
+    }
+
+    // Read receipts still happen after the UI has been updated.
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+
+      _markVisibleMessagesAsRead();
+    });
+  }
+
+  String? _getNewestMessageId() {
+    final messages = controller.messages;
+
+    if (messages.isEmpty) {
+      return null;
+    }
+
+    return messages.last.id;
+  }
+
+  // ===========================================================================
+  // Scrolling
+  // ===========================================================================
+
+  void _scheduleScrollToBottom() {
+    if (_scrollScheduled) {
+      return;
+    }
+
+    _scrollScheduled = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+
+      if (!mounted) {
+        return;
+      }
+
       _scrollToBottom();
     });
   }
@@ -85,6 +265,10 @@ class _ChatPageState extends State<ChatPage> {
 
     _scrollController.jumpTo(position.maxScrollExtent);
 
+    // The first jump can happen before the ListView has completely settled,
+    // especially when an attachment/image changes its size.
+    //
+    // Do one more check after the next frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) {
         return;
@@ -102,9 +286,88 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
-  // ---------------------------------------------------------------------------
+  void _onScroll() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    final position = _scrollController.position;
+
+    // Start loading older messages before reaching the absolute top.
+    if (position.pixels <= 150) {
+      _loadOlderMessages();
+    }
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+
+    if (controller.loadingMore || !controller.hasMoreMessages) {
+      return;
+    }
+
+    final oldScrollOffset = _scrollController.offset;
+
+    final oldMaxScrollExtent = _scrollController.position.maxScrollExtent;
+
+    await controller.loadOlderMessages();
+
+    if (!mounted || !_scrollController.hasClients) {
+      return;
+    }
+
+    final newMaxScrollExtent = _scrollController.position.maxScrollExtent;
+
+    final addedExtent = newMaxScrollExtent - oldMaxScrollExtent;
+
+    if (addedExtent <= 0) {
+      return;
+    }
+
+    // Keep the same messages underneath the user's eyes after older
+    // messages are prepended.
+    _scrollController.jumpTo(oldScrollOffset + addedExtent);
+  }
+
+  // ===========================================================================
+  // Read receipts
+  // ===========================================================================
+
+  void _markVisibleMessagesAsRead() {
+    final currentUserId = AppDependencies.authRepository.currentUser?.id;
+
+    if (currentUserId == null) {
+      return;
+    }
+
+    for (final message in controller.messages) {
+      // Only messages from the other user need a read receipt.
+      if (message.sender.id == currentUserId) {
+        continue;
+      }
+
+      // Don't repeatedly send the same read receipt.
+      if (_readMessageIds.contains(message.id)) {
+        continue;
+      }
+
+      // Already read according to the server.
+      if (message.status == MessageStatus.read) {
+        _readMessageIds.add(message.id);
+        continue;
+      }
+
+      controller.markMessageRead(message.id);
+
+      _readMessageIds.add(message.id);
+    }
+  }
+
+  // ===========================================================================
   // Attachment picking + uploading
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   Future<Attachment> _pickAttachment() async {
     final result = await FilePicker.platform.pickFiles(
@@ -139,13 +402,24 @@ class _ChatPageState extends State<ChatPage> {
     );
   }
 
+  // ===========================================================================
+  // Lifecycle
+  // ===========================================================================
+
   @override
   void dispose() {
     controller.removeListener(_update);
+
+    _scrollController.removeListener(_onScroll);
+
     _scrollController.dispose();
 
     super.dispose();
   }
+
+  // ===========================================================================
+  // Build
+  // ===========================================================================
 
   @override
   Widget build(BuildContext context) {
@@ -217,6 +491,7 @@ class _ChatPageState extends State<ChatPage> {
         final message = messages[index];
 
         return _MessageBubble(
+          key: ValueKey(message.id),
           message: message,
           isMine:
               message.sender.id ==
@@ -230,7 +505,11 @@ class _ChatPageState extends State<ChatPage> {
   }
 }
 
-class _MessageBubble extends StatefulWidget {
+// =============================================================================
+// Message bubble
+// =============================================================================
+
+class _MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMine;
   final Color myColor;
@@ -238,6 +517,7 @@ class _MessageBubble extends StatefulWidget {
   final Color borderColor;
 
   const _MessageBubble({
+    super.key,
     required this.message,
     required this.isMine,
     required this.myColor,
@@ -246,30 +526,25 @@ class _MessageBubble extends StatefulWidget {
   });
 
   @override
-  State<_MessageBubble> createState() => _MessageBubbleState();
-}
-
-class _MessageBubbleState extends State<_MessageBubble> {
-  @override
   Widget build(BuildContext context) {
-    final senderName = widget.message.sender.displayName.isNotEmpty
-        ? widget.message.sender.displayName
-        : widget.message.sender.username;
+    final senderName = message.sender.displayName.isNotEmpty
+        ? message.sender.displayName
+        : message.sender.username;
 
-    final time = _formatTime(widget.message.createdAt);
+    final time = _formatTime(message.createdAt);
 
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 16),
       child: Column(
-        crossAxisAlignment: widget.isMine
+        crossAxisAlignment: isMine
             ? CrossAxisAlignment.end
             : CrossAxisAlignment.start,
         children: [
           Padding(
             padding: EdgeInsets.only(
-              left: widget.isMine ? 40 : 4,
-              right: widget.isMine ? 4 : 40,
+              left: isMine ? 40 : 4,
+              right: isMine ? 4 : 40,
             ),
             child: Text(
               '$senderName · $time',
@@ -289,37 +564,44 @@ class _MessageBubbleState extends State<_MessageBubble> {
             ),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: widget.isMine ? widget.myColor : widget.otherColor,
+              color: isMine ? myColor : otherColor,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(14),
                 topRight: const Radius.circular(14),
-                bottomLeft: Radius.circular(widget.isMine ? 14 : 4),
-                bottomRight: Radius.circular(widget.isMine ? 4 : 14),
+                bottomLeft: Radius.circular(isMine ? 14 : 4),
+                bottomRight: Radius.circular(isMine ? 4 : 14),
               ),
-              border: Border.all(color: widget.borderColor),
+              border: Border.all(color: borderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (widget.message.content.isNotEmpty)
+                if (message.content.isNotEmpty)
                   Text(
-                    widget.message.content,
+                    message.content,
                     style: const TextStyle(fontSize: 15, height: 1.4),
                   ),
 
-                if (widget.message.attachments.isNotEmpty) ...[
-                  if (widget.message.content.isNotEmpty)
-                    const SizedBox(height: 8),
+                if (message.attachments.isNotEmpty) ...[
+                  if (message.content.isNotEmpty) const SizedBox(height: 8),
 
-                  ...widget.message.attachments.map(
-                    (attachment) => _MessageAttachment(attachment: attachment),
+                  ...message.attachments.map(
+                    (attachment) => _MessageAttachment(
+                      key: ValueKey(
+                        attachment.id.isNotEmpty
+                            ? attachment.id
+                            : attachment.storageKey,
+                      ),
+                      attachment: attachment,
+                    ),
                   ),
                 ],
 
-                if (widget.isMine) ...[
+                if (isMine) ...[
                   const SizedBox(height: 4),
-                  _MessageStatus(status: widget.message.status),
+
+                  _MessageStatus(status: message.status),
                 ],
               ],
             ),
@@ -347,7 +629,7 @@ class _MessageBubbleState extends State<_MessageBubble> {
 class _MessageAttachment extends StatefulWidget {
   final Attachment attachment;
 
-  const _MessageAttachment({required this.attachment});
+  const _MessageAttachment({super.key, required this.attachment});
 
   @override
   State<_MessageAttachment> createState() => _MessageAttachmentState();
@@ -360,6 +642,7 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
 
   bool get _isImage {
     final mimeType = widget.attachment.mimeType ?? '';
+
     return mimeType.startsWith('image/');
   }
 
@@ -376,13 +659,38 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
     final storageKey = widget.attachment.storageKey;
 
     if (storageKey == null || storageKey.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _error = 'Attachment has no storage key';
       });
+
+      return;
+    }
+
+    final cached = _AttachmentImageCache.get(storageKey);
+
+    if (cached != null) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _imageBytes = cached;
+        _loading = false;
+        _error = null;
+      });
+
       return;
     }
 
     if (_loading || _imageBytes != null) {
+      return;
+    }
+
+    if (!mounted) {
       return;
     }
 
@@ -392,18 +700,20 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
     });
 
     try {
-      final bytes = await AppDependencies.apiClient.downloadFile(storageKey);
+      final bytes = await _AttachmentImageCache.load(storageKey);
 
       if (!mounted) {
         return;
       }
 
       setState(() {
-        _imageBytes = Uint8List.fromList(bytes);
+        _imageBytes = bytes;
         _loading = false;
+        _error = null;
       });
     } catch (e, stackTrace) {
       debugPrint('ATTACHMENT IMAGE ERROR: $e');
+
       debugPrintStack(stackTrace: stackTrace);
 
       if (!mounted) {
@@ -489,13 +799,16 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
         child: Row(
           children: [
             const Icon(Icons.broken_image_outlined, color: Colors.red),
+
             const SizedBox(width: 8),
+
             Expanded(
               child: Text(
                 _error!,
                 style: const TextStyle(color: Colors.red, fontSize: 13),
               ),
             ),
+
             IconButton(onPressed: _loadImage, icon: const Icon(Icons.refresh)),
           ],
         ),
@@ -604,6 +917,7 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
 
   Future<void> _downloadFile() async {
     debugPrint('========================================');
+
     debugPrint('ATTACHMENT: _downloadFile() START');
 
     if (_loading) {
@@ -612,11 +926,15 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
     }
 
     final storageKey = widget.attachment.storageKey;
+
     final filename = widget.attachment.filename ?? 'attachment';
+
     final mimeType = widget.attachment.mimeType ?? 'application/octet-stream';
 
     debugPrint('ATTACHMENT: filename=$filename');
+
     debugPrint('ATTACHMENT: storageKey=$storageKey');
+
     debugPrint('ATTACHMENT: mimeType=$mimeType');
 
     if (storageKey == null || storageKey.isEmpty) {
@@ -630,6 +948,10 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
         _error = 'Attachment has no storage key';
       });
 
+      return;
+    }
+
+    if (!mounted) {
       return;
     }
 
@@ -648,7 +970,9 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
       );
 
       debugPrint('ATTACHMENT: DOWNLOAD SUCCESS');
+
       debugPrint('ATTACHMENT: result=${result.type}');
+
       debugPrint('ATTACHMENT: path=${result.path}');
 
       if (!mounted) {
@@ -664,10 +988,15 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
       }
     } catch (e, stackTrace) {
       debugPrint('========================================');
+
       debugPrint('ATTACHMENT DOWNLOAD ERROR');
+
       debugPrint('ERROR: $e');
+
       debugPrint('TYPE: ${e.runtimeType}');
+
       debugPrintStack(stackTrace: stackTrace);
+
       debugPrint('========================================');
 
       if (!mounted) {
@@ -685,7 +1014,10 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
     }
   }
 
-  Future<void> _showDownloadComplete({required String filename, String? path}) async {
+  Future<void> _showDownloadComplete({
+    required String filename,
+    String? path,
+  }) async {
     await showDialog<void>(
       context: context,
       builder: (context) {
@@ -699,17 +1031,24 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
               },
               child: const Text('Close'),
             ),
+
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // We'll wire this to "Open" later.
+
+                // We'll wire this to "Open"
+                // later.
               },
               child: const Text('Open'),
             ),
+
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                // We'll wire this to "Open file location" later.
+
+                // We'll wire this to
+                // "Open file location"
+                // later.
               },
               child: const Text('Open file location'),
             ),
@@ -739,6 +1078,14 @@ class _MessageAttachmentState extends State<_MessageAttachment> {
 // =============================================================================
 // Message status
 // =============================================================================
+//
+// Only two visible states:
+//
+// delivered -> grey eye
+// read      -> colored eye
+//
+// sent has no icon.
+//
 
 class _MessageStatus extends StatelessWidget {
   final MessageStatus status;
@@ -748,9 +1095,6 @@ class _MessageStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     switch (status) {
-      case MessageStatus.sent:
-        return Icon(Icons.check, size: 16, color: Colors.grey.shade600);
-
       case MessageStatus.delivered:
         return const Icon(
           Icons.visibility_outlined,
@@ -760,6 +1104,9 @@ class _MessageStatus extends StatelessWidget {
 
       case MessageStatus.read:
         return const Icon(Icons.visibility, size: 17, color: Color(0xFF6FA6A0));
+
+      case MessageStatus.sent:
+        return const SizedBox.shrink();
     }
   }
 }

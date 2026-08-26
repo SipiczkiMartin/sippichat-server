@@ -7,6 +7,7 @@ import 'package:sippichat_client/core/network/socket/websocket_service.dart';
 import 'package:sippichat_client/features/chat/chat_service.dart';
 import 'package:sippichat_client/features/chat/models/message.dart';
 
+import '../../app/app_dependencies.dart';
 import 'models/attachment.dart';
 import 'models/upload_result.dart';
 
@@ -34,6 +35,27 @@ class ChatController extends ChangeNotifier {
   String? currentConversationId;
   String? _nextCursor;
 
+  // ---------------------------------------------------------------------------
+  // New-message notification
+  // ---------------------------------------------------------------------------
+  //
+  // This changes ONLY when a genuinely new message is added.
+  //
+  // It does NOT change when:
+  //   sent -> delivered
+  //   delivered -> read
+  //
+  // ChatPage can use this to decide whether it should consider scrolling.
+  //
+
+  int _newMessageVersion = 0;
+
+  int get newMessageVersion => _newMessageVersion;
+
+  // ---------------------------------------------------------------------------
+  // WebSocket events
+  // ---------------------------------------------------------------------------
+
   void _handleWebSocketEvent(Map<String, dynamic> event) {
     final type = event['type'];
 
@@ -49,9 +71,19 @@ class ChatController extends ChangeNotifier {
       case 'message.created':
         _handleMessageCreated(payload);
         break;
+
+      case 'message.delivered':
+        _handleMessageDelivered(payload);
+        break;
+
+      case 'message.read':
+        _handleMessageRead(payload);
+        break;
+
       case 'typing.started':
         _handleTypingStarted(payload);
         break;
+
       case 'typing.stopped':
         _handleTypingStopped(payload);
         break;
@@ -60,12 +92,50 @@ class ChatController extends ChangeNotifier {
 
   void _handleMessageCreated(Map<String, dynamic> payload) {
     final message = Message.fromJson(payload);
+
     if (message.conversationId != currentConversationId) {
       return;
     }
 
-    addMessage(message);
+    final added = _addMessageWithoutExtraNotify(message);
+
+    if (!added) {
+      return;
+    }
+
+    // Tell ChatPage that a REAL new message arrived.
+    _newMessageVersion++;
+
+    notifyListeners();
+
+    _markMessageDelivered(message);
   }
+
+  void _markMessageDelivered(Message message) {
+    final currentUserId = AppDependencies.authRepository.currentUser?.id;
+
+    if (currentUserId == null) {
+      return;
+    }
+
+    // Never send a delivery receipt for our own message.
+    if (message.sender.id == currentUserId) {
+      return;
+    }
+
+    if (!webSocketService.isConnected) {
+      return;
+    }
+
+    webSocketService.send(
+      type: 'message.delivered',
+      payload: {'message_id': message.id},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Typing
+  // ---------------------------------------------------------------------------
 
   void _handleTypingStarted(Map<String, dynamic> payload) {
     final conversationId = payload['conversation_id'];
@@ -75,7 +145,9 @@ class ChatController extends ChangeNotifier {
     }
 
     isOtherUserTyping = true;
+
     debugPrint('Typing: started');
+
     notifyListeners();
   }
 
@@ -87,9 +159,15 @@ class ChatController extends ChangeNotifier {
     }
 
     isOtherUserTyping = false;
+
     debugPrint('Typing: stopped');
+
     notifyListeners();
   }
+
+  // ---------------------------------------------------------------------------
+  // Initial message loading
+  // ---------------------------------------------------------------------------
 
   Future<void> loadMessages(String conversationId) async {
     currentConversationId = conversationId;
@@ -100,6 +178,12 @@ class ChatController extends ChangeNotifier {
     _nextCursor = null;
     error = null;
     messages = [];
+
+    // Do not increment newMessageVersion here.
+    //
+    // Loading the initial conversation is not a "new message arrived"
+    // event from the user's perspective.
+    _newMessageVersion = 0;
 
     notifyListeners();
 
@@ -128,6 +212,10 @@ class ChatController extends ChangeNotifier {
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Sending
+  // ---------------------------------------------------------------------------
 
   void sendMessage(String content, {List<Attachment> attachments = const []}) {
     final conversationId = currentConversationId;
@@ -167,6 +255,25 @@ class ChatController extends ChangeNotifier {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Read receipt
+  // ---------------------------------------------------------------------------
+
+  void markMessageRead(String messageId) {
+    if (!webSocketService.isConnected) {
+      return;
+    }
+
+    webSocketService.send(
+      type: 'message.read',
+      payload: {'message_id': messageId},
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Pagination
+  // ---------------------------------------------------------------------------
+
   Future<void> loadOlderMessages() async {
     final conversationId = currentConversationId;
 
@@ -178,6 +285,7 @@ class ChatController extends ChangeNotifier {
     }
 
     loadingMore = true;
+
     notifyListeners();
 
     try {
@@ -196,6 +304,9 @@ class ChatController extends ChangeNotifier {
           .where((message) => !existingIds.contains(message.id))
           .toList();
 
+      // Pagination is NOT a new-message event.
+      //
+      // Therefore we deliberately do NOT increment _newMessageVersion.
       messages = [...olderMessages, ...messages];
 
       hasMoreMessages = page.hasMore;
@@ -207,9 +318,14 @@ class ChatController extends ChangeNotifier {
       error = e.toString();
     } finally {
       loadingMore = false;
+
       notifyListeners();
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Message merging
+  // ---------------------------------------------------------------------------
 
   void _mergeMessages(List<Message> incoming) {
     final messagesById = <String, Message>{
@@ -237,13 +353,53 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addMessage(Message message) {
+  /// Adds a message without notifying listeners.
+  ///
+  /// Returns true if the message was actually added.
+  bool _addMessageWithoutExtraNotify(Message message) {
     if (messages.any((item) => item.id == message.id)) {
+      return false;
+    }
+
+    final messagesById = <String, Message>{
+      for (final item in messages) item.id: item,
+    };
+
+    messagesById[message.id] = message;
+
+    final merged = messagesById.values.toList();
+
+    merged.sort((a, b) {
+      final createdAtComparison = a.createdAt.compareTo(b.createdAt);
+
+      if (createdAtComparison != 0) {
+        return createdAtComparison;
+      }
+
+      return a.id.compareTo(b.id);
+    });
+
+    messages = merged;
+
+    return true;
+  }
+
+  /// Public helper if another part of the app needs to add a message.
+  void addMessage(Message message) {
+    final added = _addMessageWithoutExtraNotify(message);
+
+    if (!added) {
       return;
     }
 
-    _mergeMessages([message]);
+    _newMessageVersion++;
+
+    notifyListeners();
   }
+
+  // ---------------------------------------------------------------------------
+  // Typing
+  // ---------------------------------------------------------------------------
 
   void sendTypingStart(String conversationId) {
     if (!webSocketService.isConnected) {
@@ -267,6 +423,10 @@ class ChatController extends ChangeNotifier {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Upload
+  // ---------------------------------------------------------------------------
+
   Future<UploadResult> uploadFile(PlatformFile file) async {
     debugPrint('CHAT: uploading file ${file.name}');
 
@@ -280,6 +440,74 @@ class ChatController extends ChangeNotifier {
     return result;
   }
 
+  // ---------------------------------------------------------------------------
+  // Delivery / read transitions
+  // ---------------------------------------------------------------------------
+
+  void _handleMessageDelivered(Map<String, dynamic> payload) {
+    final messageId = payload['message_id'];
+
+    if (messageId is! String) {
+      return;
+    }
+
+    _updateMessageStatus(messageId, MessageStatus.delivered);
+  }
+
+  void _handleMessageRead(Map<String, dynamic> payload) {
+    final messageId = payload['message_id'];
+
+    if (messageId is! String) {
+      return;
+    }
+
+    _updateMessageStatus(messageId, MessageStatus.read);
+  }
+
+  void _updateMessageStatus(String messageId, MessageStatus status) {
+    final index = messages.indexWhere((message) => message.id == messageId);
+
+    if (index == -1) {
+      return;
+    }
+
+    final current = messages[index];
+
+    // Status only moves forward:
+    //
+    // sent -> delivered -> read
+
+    if (current.status == MessageStatus.read) {
+      return;
+    }
+
+    if (current.status == MessageStatus.delivered &&
+        status == MessageStatus.sent) {
+      return;
+    }
+
+    // Ignore duplicate events.
+    if (current.status == status) {
+      return;
+    }
+
+    messages[index] = current.copyWith(status: status);
+
+    // IMPORTANT:
+    //
+    // This is only a visual/status update.
+    //
+    // Do NOT increment _newMessageVersion.
+    //
+    // Therefore ChatPage will rebuild the eye but will NOT interpret this
+    // as a reason to scroll.
+    notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Clear
+  // ---------------------------------------------------------------------------
+
   void clearMessages() {
     currentConversationId = null;
     messages = [];
@@ -288,13 +516,19 @@ class ChatController extends ChangeNotifier {
     loadingMore = false;
     _nextCursor = null;
     isOtherUserTyping = false;
+    _newMessageVersion = 0;
 
     notifyListeners();
   }
 
+  // ---------------------------------------------------------------------------
+  // Dispose
+  // ---------------------------------------------------------------------------
+
   @override
   void dispose() {
     _websocketSubscription?.cancel();
+
     super.dispose();
   }
 }

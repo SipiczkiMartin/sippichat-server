@@ -16,36 +16,43 @@ class Message {
     required this.createdAt,
     required this.sender,
     this.attachments = const [],
-    this.status = MessageStatus.sent
+    this.status = MessageStatus.sent,
   });
 
   factory Message.fromJson(Map<String, dynamic> json) {
-    final attachmentsJson =
-        json["attachments"] as List<dynamic>? ?? [];
+    final attachmentsJson = json["attachments"] as List<dynamic>? ?? [];
 
     return Message(
       id: json["id"],
       conversationId: json["conversation_id"],
       content: json["content"],
       createdAt: DateTime.parse(json["created_at"]),
-      sender: Sender.fromJson(
-        json["sender"],
-      ),
+      sender: Sender.fromJson(json["sender"]),
       attachments: attachmentsJson
-          .map(
-            (json) => Attachment.fromJson(
-          json as Map<String, dynamic>,
-        ),
-      )
+          .map((json) => Attachment.fromJson(json as Map<String, dynamic>))
           .toList(),
+
+      // Read the status returned by the backend.
+      // If it isn't present yet, keep the default as sent.
+      status: _parseMessageStatus(json["status"]),
     );
   }
 
+  static MessageStatus _parseMessageStatus(dynamic value) {
+    switch (value) {
+      case "delivered":
+        return MessageStatus.delivered;
 
-  Message copyWith({
-    MessageStatus? status,
-    List<Attachment>? attachments,
-  }) {
+      case "read":
+        return MessageStatus.read;
+
+      case "sent":
+      default:
+        return MessageStatus.sent;
+    }
+  }
+
+  Message copyWith({MessageStatus? status, List<Attachment>? attachments}) {
     return Message(
       id: id,
       conversationId: conversationId,
@@ -56,16 +63,9 @@ class Message {
       status: status ?? this.status,
     );
   }
-
 }
 
-
-
-enum MessageStatus{
-  sent,
-  delivered,
-  read,
-}
+enum MessageStatus { sent, delivered, read }
 
 class Sender {
   final String id;
