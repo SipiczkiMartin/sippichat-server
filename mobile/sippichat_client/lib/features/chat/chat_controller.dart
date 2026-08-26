@@ -1,17 +1,23 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sippichat_client/core/network/api_client.dart';
 import 'package:sippichat_client/core/network/socket/websocket_service.dart';
 import 'package:sippichat_client/features/chat/chat_service.dart';
 import 'package:sippichat_client/features/chat/models/message.dart';
 
+import 'models/attachment.dart';
+import 'models/upload_result.dart';
+
 class ChatController extends ChangeNotifier {
   final ChatService chatService;
   final WebSocketService webSocketService;
+  final ApiClient apiClient;
 
   StreamSubscription<Map<String, dynamic>>? _websocketSubscription;
 
-  ChatController(this.chatService, this.webSocketService) {
+  ChatController(this.chatService, this.webSocketService, this.apiClient) {
     _websocketSubscription = webSocketService.events.listen(
       _handleWebSocketEvent,
     );
@@ -39,7 +45,7 @@ class ChatController extends ChangeNotifier {
       return;
     }
 
-    switch (type){
+    switch (type) {
       case 'message.created':
         _handleMessageCreated(payload);
         break;
@@ -52,19 +58,19 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  void _handleMessageCreated(Map<String,dynamic> payload){
+  void _handleMessageCreated(Map<String, dynamic> payload) {
     final message = Message.fromJson(payload);
-    if(message.conversationId != currentConversationId){
+    if (message.conversationId != currentConversationId) {
       return;
     }
 
     addMessage(message);
   }
 
-  void _handleTypingStarted(Map<String,dynamic> payload){
+  void _handleTypingStarted(Map<String, dynamic> payload) {
     final conversationId = payload['conversation_id'];
 
-    if(conversationId != currentConversationId){
+    if (conversationId != currentConversationId) {
       return;
     }
 
@@ -73,10 +79,10 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _handleTypingStopped(Map<String,dynamic> payload){
+  void _handleTypingStopped(Map<String, dynamic> payload) {
     final conversationId = payload['conversation_id'];
 
-    if(conversationId != currentConversationId){
+    if (conversationId != currentConversationId) {
       return;
     }
 
@@ -123,7 +129,7 @@ class ChatController extends ChangeNotifier {
     }
   }
 
-  void sendMessage(String content) {
+  void sendMessage(String content, {List<Attachment> attachments = const []}) {
     final conversationId = currentConversationId;
 
     if (conversationId == null) {
@@ -132,7 +138,7 @@ class ChatController extends ChangeNotifier {
 
     final trimmedContent = content.trim();
 
-    if (trimmedContent.isEmpty) {
+    if (trimmedContent.isEmpty && attachments.isEmpty) {
       return;
     }
 
@@ -143,7 +149,21 @@ class ChatController extends ChangeNotifier {
 
     webSocketService.send(
       type: 'message.send',
-      payload: {'conversation_id': conversationId, 'content': trimmedContent},
+      payload: {
+        'conversation_id': conversationId,
+        'content': trimmedContent,
+        'attachments': attachments.map((attachment) {
+          return {
+            'type': attachment.type,
+            'external_url': attachment.externalUrl,
+            'storage_key': attachment.storageKey,
+            'filename': attachment.filename,
+            'mime_type': attachment.mimeType,
+            'size': attachment.size,
+            'metadata': attachment.metadata,
+          };
+        }).toList(),
+      },
     );
   }
 
@@ -245,6 +265,19 @@ class ChatController extends ChangeNotifier {
       type: 'typing.stopped',
       payload: {'conversation_id': conversationId},
     );
+  }
+
+  Future<UploadResult> uploadFile(PlatformFile file) async {
+    debugPrint('CHAT: uploading file ${file.name}');
+
+    final result = await apiClient.uploadFile(file);
+
+    debugPrint(
+      'CHAT: upload successful '
+      'storageKey=${result.storageKey}',
+    );
+
+    return result;
   }
 
   void clearMessages() {

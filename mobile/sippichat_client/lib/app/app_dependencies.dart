@@ -1,3 +1,6 @@
+import 'package:sippichat_client/core/files/download_service.dart';
+import 'package:sippichat_client/core/files/download_service_factory.dart';
+import 'package:sippichat_client/core/files/file_service.dart';
 import 'package:sippichat_client/core/network/api_client.dart';
 import 'package:sippichat_client/core/network/socket/websocket_service.dart';
 import 'package:sippichat_client/core/storage/token_storage.dart';
@@ -18,7 +21,9 @@ class AppDependencies {
 
 
   static final TokenStorage storage = TokenStorage();
+  static final FileService fileService = FileService();
   static final ApiClient apiClient = ApiClient(storage);
+  static final DownloadService downloadService = createDownloadService(apiClient);
   static final WebSocketService webSocketService = WebSocketService(storage);
   static final AuthRepository authRepository = AuthRepository(apiClient: apiClient, storage: storage);
   static final AuthController authController = AuthController(authRepository);
@@ -28,7 +33,7 @@ class AppDependencies {
 
 
   static final ChatService chatService = ChatService(apiClient);
-  static final ChatController chatController = ChatController(chatService,webSocketService);
+  static final ChatController chatController = ChatController(chatService,webSocketService,apiClient);
 
   static final ProfileService profileService = ProfileService(apiClient);
   static final ProfileController profileController = ProfileController(profileService);
