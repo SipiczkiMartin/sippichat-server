@@ -1,9 +1,9 @@
-import 'dart:typed_data';
+Future<String?> chooseDownloadPathImpl({required String filename}) async {
+  throw UnsupportedError(
+    'Choosing a download path is not implemented on this platform.',
+  );
+}
 
-Future<void> downloadBytesImpl({
-  required Uint8List bytes,
-  required String filename,
-  required String mimeType,
-}) async {
-  throw UnsupportedError('File download is not implemented on this platform.');
+Future<void> openFileImpl(String path) async {
+  throw UnsupportedError('Opening files is not implemented on this platform.');
 }

@@ -1,13 +1,7 @@
-import 'dart:typed_data';
-import 'dart:js_interop';
+Future<String?> chooseDownloadPathImpl({required String filename}) async {
+  return null;
+}
 
-@JS('document.createElement')
-external JSObject _createElement(JSString tagName);
-
-Future<void> downloadBytesImpl({
-  required Uint8List bytes,
-  required String filename,
-  required String mimeType,
-}) async {
-  // Browser implementation next.
+Future<void> openFileImpl(String path) async {
+  // Browser handles downloaded files.
 }
