@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 
 import 'package:sippichat_client/core/errors/app_exception.dart';
 import 'package:sippichat_client/core/network/api_client.dart';
-import 'package:sippichat_client/core/network/websocket_client.dart';
 import 'package:sippichat_client/core/storage/token_storage.dart';
 
 import 'package:sippichat_client/features/auth/models/register_request.dart';

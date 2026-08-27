@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:sippichat_client/app/app_dependencies.dart';
 import 'package:sippichat_client/features/auth/login_page.dart';
+import 'package:sippichat_client/features/web/web_shell.dart';
 
 import '../conversations/conversations_page.dart';
 
@@ -12,8 +14,8 @@ class AuthBootstrap extends StatefulWidget {
 }
 
 class _AuthBootstrapState extends State<AuthBootstrap> {
-  late final Future<bool> _sessionFuture =
-  AppDependencies.authRepository.restoreSession();
+  late final Future<bool> _sessionFuture = AppDependencies.authRepository
+      .restoreSession();
 
   @override
   Widget build(BuildContext context) {
@@ -22,13 +24,15 @@ class _AuthBootstrapState extends State<AuthBootstrap> {
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
+            body: Center(child: CircularProgressIndicator()),
           );
         }
 
         if (snapshot.data == true) {
+          if (kIsWeb) {
+            return const WebShell();
+          }
+
           return const ConversationsPage();
         }
 
