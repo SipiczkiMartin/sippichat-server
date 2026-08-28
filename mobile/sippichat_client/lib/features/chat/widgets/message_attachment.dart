@@ -71,6 +71,11 @@ class _MessageAttachmentState extends State<MessageAttachment> {
   String? _error;
   Uint8List? _imageBytes;
 
+  bool get _isExternalGif {
+    return widget.attachment.type == 'gif' &&
+        (widget.attachment.externalUrl?.isNotEmpty ?? false);
+  }
+
   bool get _isImage {
     final mimeType = widget.attachment.mimeType ?? '';
 
@@ -81,8 +86,29 @@ class _MessageAttachmentState extends State<MessageAttachment> {
   void initState() {
     super.initState();
 
-    if (_isImage) {
+    // GIPHY GIFs are loaded directly from externalUrl.
+    //
+    // They do NOT have a storageKey and therefore must not go through
+    // the normal image download/cache flow.
+    if (_isImage && !_isExternalGif) {
       _loadImage();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MessageAttachment oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.attachment.storageKey != widget.attachment.storageKey ||
+        oldWidget.attachment.externalUrl != widget.attachment.externalUrl ||
+        oldWidget.attachment.type != widget.attachment.type) {
+      _loading = false;
+      _error = null;
+      _imageBytes = null;
+
+      if (_isImage && !_isExternalGif) {
+        _loadImage();
+      }
     }
   }
 
@@ -157,8 +183,70 @@ class _MessageAttachmentState extends State<MessageAttachment> {
     }
   }
 
-  void _openImageViewer() {
-    if (_imageBytes == null) {
+  // ---------------------------------------------------------------------------
+  // External GIF
+  // ---------------------------------------------------------------------------
+
+  Widget _buildExternalGif() {
+    final url = widget.attachment.externalUrl;
+
+    if (url == null || url.isEmpty) {
+      return Container(
+        width: 240,
+        height: 180,
+        margin: const EdgeInsets.only(top: 4),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: const Icon(Icons.broken_image_outlined),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _openExternalGifViewer,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          url,
+          width: 240,
+          height: 180,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+
+            return Container(
+              width: 240,
+              height: 180,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(child: CircularProgressIndicator()),
+            );
+          },
+          errorBuilder: (_, __, ___) {
+            return Container(
+              width: 240,
+              height: 180,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.broken_image_outlined),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  void _openExternalGifViewer() {
+    final url = widget.attachment.externalUrl;
+
+    if (url == null || url.isEmpty) {
       return;
     }
 
@@ -175,7 +263,17 @@ class _MessageAttachmentState extends State<MessageAttachment> {
                 child: InteractiveViewer(
                   minScale: 0.5,
                   maxScale: 4.0,
-                  child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) {
+                      return const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white,
+                        size: 64,
+                      );
+                    },
+                  ),
                 ),
               ),
 
@@ -194,14 +292,37 @@ class _MessageAttachmentState extends State<MessageAttachment> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Build
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
+    // IMPORTANT:
+    //
+    // GIPHY GIF:
+    // externalUrl -> Image.network
+    //
+    // Uploaded image:
+    // storageKey -> API download/cache
+    //
+    // Normal file:
+    // storageKey -> download service
+
+    if (_isExternalGif) {
+      return _buildExternalGif();
+    }
+
     if (_isImage) {
       return _buildImageAttachment();
     }
 
     return _buildFileAttachment();
   }
+
+  // ---------------------------------------------------------------------------
+  // Uploaded image
+  // ---------------------------------------------------------------------------
 
   Widget _buildImageAttachment() {
     if (_loading) {
@@ -262,6 +383,47 @@ class _MessageAttachmentState extends State<MessageAttachment> {
       ),
     );
   }
+
+  void _openImageViewer() {
+    if (_imageBytes == null) {
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(12),
+          child: Stack(
+            children: [
+              Center(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.memory(_imageBytes!, fit: BoxFit.contain),
+                ),
+              ),
+
+              Positioned(
+                top: 0,
+                right: 0,
+                child: IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Normal file
+  // ---------------------------------------------------------------------------
 
   Widget _buildFileAttachment() {
     final attachment = widget.attachment;
@@ -344,6 +506,10 @@ class _MessageAttachmentState extends State<MessageAttachment> {
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // File download
+  // ---------------------------------------------------------------------------
 
   Future<void> _downloadFile() async {
     debugPrint('========================================');

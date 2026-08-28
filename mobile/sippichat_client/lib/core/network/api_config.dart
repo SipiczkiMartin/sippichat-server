@@ -16,4 +16,8 @@ class ApiConfig {
 
     return 'ws//10.0.2.2:8080/ws';
   }
+
+  static const String giphyApiKey = String.fromEnvironment(
+    'GIPHY_API_KEY',
+  );
 }

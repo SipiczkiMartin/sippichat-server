@@ -7,6 +7,7 @@ import 'package:sippichat_client/core/storage/token_storage.dart';
 import 'package:sippichat_client/features/auth/auth_repository.dart';
 import 'package:sippichat_client/features/chat/chat_controller.dart';
 import 'package:sippichat_client/features/chat/chat_service.dart';
+import 'package:sippichat_client/features/chat/widgets/giphy_service.dart';
 import 'package:sippichat_client/features/conversations/conversation_controller.dart';
 import 'package:sippichat_client/features/conversations/conversation_service.dart';
 import 'package:sippichat_client/features/profile/profile_service.dart';
@@ -24,6 +25,7 @@ class AppDependencies {
   static final FileService fileService = FileService();
   static final ApiClient apiClient = ApiClient(storage);
   static final DownloadService downloadService = createDownloadService(apiClient);
+  static final GiphyService giphyService = GiphyService();
   static final WebSocketService webSocketService = WebSocketService(storage);
   static final AuthRepository authRepository = AuthRepository(apiClient: apiClient, storage: storage);
   static final AuthController authController = AuthController(authRepository);
