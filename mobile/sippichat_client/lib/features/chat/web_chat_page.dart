@@ -12,8 +12,13 @@ import 'models/attachment.dart';
 
 class WebChatPage extends StatefulWidget {
   final Conversation conversation;
+  final VoidCallback onClose;
 
-  const WebChatPage({super.key, required this.conversation});
+  const WebChatPage({
+    super.key,
+    required this.conversation,
+    required this.onClose,
+  });
 
   @override
   State<WebChatPage> createState() => _WebChatPageState();
@@ -402,10 +407,20 @@ class _WebChatPageState extends State<WebChatPage> {
 
           const Spacer(),
 
-          IconButton(
-            tooltip: 'More',
-            onPressed: () {},
-            icon: const Icon(Icons.more_horiz, color: textSecondary),
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'More',
+                onPressed: () {},
+                icon: const Icon(Icons.more_horiz, color: textSecondary),
+              ),
+
+              IconButton(
+                tooltip: 'Close conversation',
+                onPressed: widget.onClose,
+                icon: const Icon(Icons.close, color: textSecondary),
+              ),
+            ],
           ),
         ],
       ),

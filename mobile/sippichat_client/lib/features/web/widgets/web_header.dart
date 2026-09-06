@@ -17,6 +17,7 @@ class WebHeader extends StatefulWidget {
 class _WebHeaderState extends State<WebHeader> {
   final searchController = AppDependencies.userSearchController;
   final conversationController = AppDependencies.conversationController;
+  final authController = AppDependencies.authController;
 
   final TextEditingController _searchTextController = TextEditingController();
 
@@ -90,20 +91,12 @@ class _WebHeaderState extends State<WebHeader> {
         return Positioned.fill(
           child: Stack(
             children: [
-              // ---------------------------------------------------------------
-              // Transparent area behind dropdown.
-              //
-              // Clicking outside closes the search results.
-              // ---------------------------------------------------------------
               GestureDetector(
                 behavior: HitTestBehavior.translucent,
                 onTap: _hideSearchOverlay,
                 child: const SizedBox.expand(),
               ),
 
-              // ---------------------------------------------------------------
-              // Search dropdown
-              // ---------------------------------------------------------------
               CompositedTransformFollower(
                 link: _searchLayerLink,
                 showWhenUnlinked: false,
@@ -318,20 +311,23 @@ class _WebHeaderState extends State<WebHeader> {
             offset: const Offset(0, 48),
             color: const Color(0xFF20242A),
             elevation: 8,
-            onSelected: (value) {
+            onSelected: (value) async {
               switch (value) {
                 case 'profile':
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const WebProfilePage()),
                   );
-
                   break;
 
                 case 'settings':
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Settings coming soon')),
                   );
+                  break;
+
+                case 'logout':
+                  await authController.logout();
                   break;
               }
             },
@@ -375,11 +371,22 @@ class _WebHeaderState extends State<WebHeader> {
                   style: TextStyle(color: textPrimary, fontSize: 14),
                 ),
               ),
+
               PopupMenuItem(
                 value: 'settings',
                 child: Text(
                   'Settings',
                   style: TextStyle(color: textPrimary, fontSize: 14),
+                ),
+              ),
+
+              PopupMenuDivider(),
+
+              PopupMenuItem(
+                value: 'logout',
+                child: Text(
+                  'Logout',
+                  style: TextStyle(color: Color(0xFFFF6B6B), fontSize: 14),
                 ),
               ),
             ],

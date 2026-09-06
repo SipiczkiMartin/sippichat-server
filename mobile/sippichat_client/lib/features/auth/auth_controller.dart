@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+
 import 'auth_repository.dart';
 import 'models/register_request.dart';
 
@@ -80,9 +81,17 @@ class AuthController extends ChangeNotifier {
     }
   }
 
-  void logout() {
-    authenticated = false;
-    error = null;
-    notifyListeners();
+  Future<void> logout() async {
+    try {
+      await authRepository.logout();
+    } catch (e, stackTrace) {
+      debugPrint("Logout error: $e");
+      debugPrintStack(stackTrace: stackTrace);
+    } finally {
+      authenticated = false;
+      error = null;
+
+      notifyListeners();
+    }
   }
 }

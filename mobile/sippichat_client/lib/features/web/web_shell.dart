@@ -50,6 +50,11 @@ class _WebShellState extends State<WebShell> {
                         Expanded(
                           child: WebWorkspace(
                             selectedConversation: selectedConversation,
+                            onClose: (){
+                              setState(() {
+                                selectedConversation = null;
+                              });
+                            },
                           ),
                         ),
                       ],

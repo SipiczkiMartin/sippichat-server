@@ -5,8 +5,9 @@ import '../../chat/web_chat_page.dart';
 
 class WebWorkspace extends StatelessWidget {
   final Conversation? selectedConversation;
+  final VoidCallback onClose;
 
-  const WebWorkspace({super.key, required this.selectedConversation});
+  const WebWorkspace({super.key, required this.selectedConversation, required this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +15,7 @@ class WebWorkspace extends StatelessWidget {
       return WebChatPage(
         key: ValueKey(selectedConversation!.id),
         conversation: selectedConversation!,
+        onClose: onClose,
       );
     }
 
