@@ -1,7 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:sippichat_client/app/app_dependencies.dart';
-import 'package:sippichat_client/core/network/api_config.dart';
 import 'package:sippichat_client/features/chat/models/message.dart';
 import 'package:sippichat_client/features/chat/widgets/message_bubble.dart';
 import 'package:sippichat_client/features/chat/widgets/message_input.dart';
@@ -12,7 +11,10 @@ import '../models/attachment.dart';
 class ChatView extends StatefulWidget {
   final Conversation conversation;
 
-  const ChatView({super.key, required this.conversation});
+  const ChatView({
+    super.key,
+    required this.conversation,
+  });
 
   @override
   State<ChatView> createState() => _ChatViewState();
@@ -52,14 +54,9 @@ class _ChatViewState extends State<ChatView> {
 
   Future<void> _initialize() async {
     try {
-      await AppDependencies.webSocketService.connect(
-        url: ApiConfig.websocketUrl,
-      );
-
-      if (!mounted) {
-        return;
-      }
-
+      // The WebSocket is now connected at the authenticated app/session level.
+      //
+      // ChatView only loads the messages for this conversation.
       await controller.loadMessages(widget.conversation.id);
 
       if (!mounted) {
@@ -90,9 +87,9 @@ class _ChatViewState extends State<ChatView> {
 
     final bool hasNewMessage =
         messages.isNotEmpty &&
-        _lastMessageId != null &&
-        newestMessageId != null &&
-        newestMessageId != _lastMessageId;
+            _lastMessageId != null &&
+            newestMessageId != null &&
+            newestMessageId != _lastMessageId;
 
     final bool initialMessagesLoaded =
         _lastMessageId == null && messages.isNotEmpty;
@@ -207,7 +204,8 @@ class _ChatViewState extends State<ChatView> {
 
     final oldScrollOffset = _scrollController.offset;
 
-    final oldMaxScrollExtent = _scrollController.position.maxScrollExtent;
+    final oldMaxScrollExtent =
+        _scrollController.position.maxScrollExtent;
 
     await controller.loadOlderMessages();
 
@@ -215,15 +213,19 @@ class _ChatViewState extends State<ChatView> {
       return;
     }
 
-    final newMaxScrollExtent = _scrollController.position.maxScrollExtent;
+    final newMaxScrollExtent =
+        _scrollController.position.maxScrollExtent;
 
-    final addedExtent = newMaxScrollExtent - oldMaxScrollExtent;
+    final addedExtent =
+        newMaxScrollExtent - oldMaxScrollExtent;
 
     if (addedExtent <= 0) {
       return;
     }
 
-    _scrollController.jumpTo(oldScrollOffset + addedExtent);
+    _scrollController.jumpTo(
+      oldScrollOffset + addedExtent,
+    );
   }
 
   // ===========================================================================
@@ -231,7 +233,8 @@ class _ChatViewState extends State<ChatView> {
   // ===========================================================================
 
   void _markVisibleMessagesAsRead() {
-    final currentUserId = AppDependencies.authRepository.currentUser?.id;
+    final currentUserId =
+        AppDependencies.authRepository.currentUser?.id;
 
     if (currentUserId == null) {
       return;
@@ -275,8 +278,8 @@ class _ChatViewState extends State<ChatView> {
 
     debugPrint(
       'ATTACHMENT: selected '
-      '${file.name} '
-      '(${file.size} bytes)',
+          '${file.name} '
+          '(${file.size} bytes)',
     );
 
     final upload = await controller.uploadFile(file);
@@ -319,11 +322,17 @@ class _ChatViewState extends State<ChatView> {
 
     return Column(
       children: [
-        Expanded(child: _buildMessageList(messages)),
+        Expanded(
+          child: _buildMessageList(messages),
+        ),
 
         if (controller.isOtherUserTyping)
           const Padding(
-            padding: EdgeInsets.only(left: 16, right: 16, bottom: 6),
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              bottom: 6,
+            ),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -350,25 +359,34 @@ class _ChatViewState extends State<ChatView> {
 
   Widget _buildMessageList(List<Message> messages) {
     if (controller.loading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
     }
 
     if (controller.error != null) {
       return Center(
         child: Text(
           controller.error!,
-          style: const TextStyle(color: Colors.red),
+          style: const TextStyle(
+            color: Colors.red,
+          ),
         ),
       );
     }
 
     if (messages.isEmpty) {
-      return const Center(child: Text('No messages yet'));
+      return const Center(
+        child: Text('No messages yet'),
+      );
     }
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 16,
+      ),
       itemCount: messages.length,
       itemBuilder: (context, index) {
         final message = messages[index];
@@ -377,7 +395,7 @@ class _ChatViewState extends State<ChatView> {
           key: ValueKey(message.id),
           message: message,
           isMine:
-              message.sender.id ==
+          message.sender.id ==
               AppDependencies.authRepository.currentUser?.id,
           myColor: myMessageColor,
           otherColor: otherMessageColor,

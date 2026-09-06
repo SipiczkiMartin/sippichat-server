@@ -149,7 +149,10 @@ class _WebNavigationState extends State<WebNavigation> {
         return _ConversationItem(
           conversation: conversation,
           selected: conversation.id == widget.selectedConversationId,
+          hasUnread: controller.hasUnreadMessages(conversation.id),
+          unreadCount: controller.unreadCountFor(conversation.id),
           onTap: () {
+            controller.setActiveConversation(conversation.id);
             widget.onConversationSelected(conversation);
           },
         );
@@ -229,11 +232,15 @@ class _ConversationItem extends StatelessWidget {
   final Conversation conversation;
   final bool selected;
   final VoidCallback onTap;
+  final int unreadCount;
+  final bool hasUnread;
 
   const _ConversationItem({
     required this.conversation,
     required this.selected,
     required this.onTap,
+    required this.unreadCount,
+    required this.hasUnread,
   });
 
   @override
@@ -250,7 +257,11 @@ class _ConversationItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8),
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF252A31) : Colors.transparent,
+          color: selected
+              ? const Color(0xFF252A31)
+              : hasUnread
+              ? const Color(0xFF20242A)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
@@ -272,11 +283,36 @@ class _ConversationItem extends StatelessWidget {
                   fontSize: 14,
                   color: selected
                       ? const Color(0xFFF1F3F5)
+                      : hasUnread
+                      ? const Color(0xFFF1F3F5)
                       : const Color(0xFFB8BEC7),
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: selected || hasUnread
+                      ? FontWeight.w600
+                      : FontWeight.w400,
                 ),
               ),
             ),
+
+            if (hasUnread) ...[
+              const SizedBox(width: 8),
+              Container(
+                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B929B),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  unreadCount > 99 ? '99+' : unreadCount.toString(),
+                  style: const TextStyle(
+                    color: Color(0xFF0D0F11),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

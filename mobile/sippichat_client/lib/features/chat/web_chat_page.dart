@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:sippichat_client/app/app_dependencies.dart';
-import 'package:sippichat_client/core/network/api_config.dart';
 import 'package:sippichat_client/features/chat/models/message.dart';
 import 'package:sippichat_client/features/chat/widgets/message_bubble.dart';
 import 'package:sippichat_client/features/chat/widgets/message_input.dart';
@@ -66,12 +65,6 @@ class _WebChatPageState extends State<WebChatPage> {
 
   Future<void> _initialize() async {
     try {
-      await AppDependencies.webSocketService.connect(
-        url: ApiConfig.websocketUrl,
-      );
-
-      if (!mounted) return;
-
       await controller.loadMessages(widget.conversation.id);
 
       if (!mounted) return;
@@ -313,7 +306,7 @@ class _WebChatPageState extends State<WebChatPage> {
 
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
-            fillColor: const Color(0xFF16191D),
+          fillColor: const Color(0xFF16191D),
           hintStyle: const TextStyle(color: textMuted),
           labelStyle: const TextStyle(color: textSecondary),
           enabledBorder: OutlineInputBorder(

@@ -4,7 +4,6 @@ import 'package:sippichat_client/features/auth/login_page.dart';
 import 'package:sippichat_client/features/conversations/conversation_tile.dart';
 import 'package:sippichat_client/features/profile/profile_page.dart';
 import 'package:sippichat_client/features/users/models/user_search_result.dart';
-
 import '../chat/chat_page.dart';
 
 class ConversationsPage extends StatefulWidget {
@@ -28,9 +27,10 @@ class _ConversationsPageState extends State<ConversationsPage> {
     controller.addListener(_update);
     searchController.addListener(_update);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      controller.loadConversations();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+     await controller.loadConversations();
     });
+
   }
 
   void _update() {
@@ -241,7 +241,10 @@ class _ConversationsPageState extends State<ConversationsPage> {
 
         return ConversationTile(
           conversation: conversation,
+          hasUnread: controller.hasUnreadMessages(conversation.id),
+          unreadCount: controller.unreadCountFor(conversation.id),
           onTap: () {
+            controller.setActiveConversation(conversation.id);
             Navigator.push(
               context,
               MaterialPageRoute(
