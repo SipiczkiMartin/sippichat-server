@@ -100,13 +100,15 @@ type ConversationResponse struct {
 	CreatedAt   time.Time            `json:"created_at"`
 	Participant *ParticipantResponse `json:"participant,omitempty"`
 	LastMessage *LastMessageResponse `json:"last_message,omitempty"`
+	UnreadCount int64                `json:"unread_count"`
 }
 
 func toConversationResponse(conversation Conversation) ConversationResponse {
 	return ConversationResponse{
-		ID:        conversation.ID.String(),
-		Type:      conversation.Type,
-		CreatedAt: conversation.CreatedAt,
+		ID:          conversation.ID.String(),
+		Type:        conversation.Type,
+		CreatedAt:   conversation.CreatedAt,
+		UnreadCount: conversation.UnreadCount,
 
 		Participant: &ParticipantResponse{
 			ID:          conversation.Participant.ID.String(),

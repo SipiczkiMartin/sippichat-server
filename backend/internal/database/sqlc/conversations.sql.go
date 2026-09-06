@@ -188,7 +188,20 @@ SELECT
     p.user_id       AS participant_id,
     p.username,
     p.display_name,
-    p.avatar_url
+    p.avatar_url,
+
+    (
+        SELECT COUNT(*)
+        FROM messages m
+        WHERE m.conversation_id = c.id
+          AND m.sender_id <> $1
+          AND NOT EXISTS (
+              SELECT 1
+              FROM message_reads mr
+              WHERE mr.message_id = m.id
+                AND mr.user_id = $1
+          )
+    ) AS unread_count
 
 FROM conversations c
 
@@ -215,10 +228,11 @@ type ListConversationsRow struct {
 	Username      string
 	DisplayName   string
 	AvatarUrl     pgtype.Text
+	UnreadCount   int64
 }
 
-func (q *Queries) ListConversations(ctx context.Context, userID pgtype.UUID) ([]ListConversationsRow, error) {
-	rows, err := q.db.Query(ctx, listConversations, userID)
+func (q *Queries) ListConversations(ctx context.Context, senderID pgtype.UUID) ([]ListConversationsRow, error) {
+	rows, err := q.db.Query(ctx, listConversations, senderID)
 	if err != nil {
 		return nil, err
 	}
@@ -234,6 +248,7 @@ func (q *Queries) ListConversations(ctx context.Context, userID pgtype.UUID) ([]
 			&i.Username,
 			&i.DisplayName,
 			&i.AvatarUrl,
+			&i.UnreadCount,
 		); err != nil {
 			return nil, err
 		}

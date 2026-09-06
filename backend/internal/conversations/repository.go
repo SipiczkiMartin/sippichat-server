@@ -75,9 +75,10 @@ func (r *Repository) ListConversations(
 	for _, row := range rows {
 
 		conversation := Conversation{
-			ID:        uuid.UUID(row.ID.Bytes),
-			Type:      row.Type,
-			CreatedAt: row.CreatedAt.Time,
+			ID:          uuid.UUID(row.ID.Bytes),
+			Type:        row.Type,
+			CreatedAt:   row.CreatedAt.Time,
+			UnreadCount: row.UnreadCount,
 			Participant: Participant{
 				ID:          uuid.UUID(row.ParticipantID.Bytes),
 				Username:    row.Username,

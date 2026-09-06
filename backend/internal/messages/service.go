@@ -50,13 +50,6 @@ func (s *Service) SendMessage(
 	input SendMessageInput,
 ) (Message, error) {
 
-	log.Printf(
-		"SEND MESSAGE: conversation=%s sender=%s content=%q",
-		input.ConversationID,
-		input.SenderID,
-		input.Content,
-	)
-
 	if input.Content == "" && len(input.Attachments) == 0 {
 		return Message{}, errors.New("message must contain text or an attachment")
 	}
@@ -81,8 +74,6 @@ func (s *Service) SendMessage(
 		log.Printf("SEND MESSAGE: membership check error: %v", err)
 		return Message{}, err
 	}
-
-	log.Printf("SEND MESSAGE: isMember=%v", isMember)
 
 	if !isMember {
 		log.Printf("SEND MESSAGE ERROR: user is not member")
@@ -128,7 +119,6 @@ func (s *Service) SendMessage(
 	if err != nil {
 		return Message{}, err
 	}
-	log.Printf("SEND MESSAGE: created message=%v", message.ID)
 
 	attachments, err := s.repo.ListAttachmentsByMessageID(
 		ctx,
@@ -171,8 +161,6 @@ func (s *Service) SendMessage(
 		log.Printf("SEND MESSAGE: GetMessageByID ERROR: %v", err)
 		return Message{}, err
 	}
-
-	log.Printf("SEND MESSAGE: loaded message=%v", messageDetails.ID)
 
 	eventAttachments := make(
 		[]events.MessageCreatedAttachment,
@@ -226,23 +214,12 @@ func (s *Service) SendMessage(
 		},
 	}
 
-	log.Printf(
-		"SEND MESSAGE: broadcasting message=%s to %d members",
-		newMessage.ID,
-		len(members),
-	)
-
 	for _, memberID := range members {
 
 		if !memberID.Valid {
 			log.Printf("SEND MESSAGE: skipping invalid member ID")
 			continue
 		}
-
-		log.Printf(
-			"SEND MESSAGE: SendToUser user=%s",
-			memberID.Bytes,
-		)
 
 		s.hub.SendToUser(
 			memberID.Bytes,

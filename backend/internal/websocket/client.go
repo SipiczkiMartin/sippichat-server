@@ -29,12 +29,6 @@ func (c *WSClient) Send(data any) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	log.Printf(
-		"WS SEND: user=%s data=%+v",
-		c.UserID,
-		data,
-	)
-
 	err := wsjson.Write(
 		context.Background(),
 		c.Conn,
@@ -50,11 +44,6 @@ func (c *WSClient) Send(data any) error {
 
 		return err
 	}
-
-	log.Printf(
-		"WS SEND SUCCESS: user=%s",
-		c.UserID,
-	)
 
 	return nil
 }
@@ -96,11 +85,6 @@ func (c *WSClient) StartHeartbeat() {
 
 					return
 				}
-
-				// log.Printf(
-				// 	"WS HEARTBEAT OK: user=%s",
-				// 	c.UserID,
-				// )
 
 			case <-ctx.Done():
 				return

@@ -52,7 +52,20 @@ SELECT
     p.user_id       AS participant_id,
     p.username,
     p.display_name,
-    p.avatar_url
+    p.avatar_url,
+
+    (
+        SELECT COUNT(*)
+        FROM messages m
+        WHERE m.conversation_id = c.id
+          AND m.sender_id <> $1
+          AND NOT EXISTS (
+              SELECT 1
+              FROM message_reads mr
+              WHERE mr.message_id = m.id
+                AND mr.user_id = $1
+          )
+    ) AS unread_count
 
 FROM conversations c
 
@@ -69,6 +82,7 @@ JOIN profiles p
 WHERE self.user_id = $1
 
 ORDER BY c.created_at DESC;
+
 
 -- name: ListConversationMembers :many
 SELECT user_id

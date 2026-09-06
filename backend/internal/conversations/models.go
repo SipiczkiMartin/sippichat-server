@@ -11,6 +11,7 @@ type Conversation struct {
 	Type        string
 	CreatedAt   time.Time
 	Participant Participant
+	UnreadCount int64
 }
 
 type Participant struct {
