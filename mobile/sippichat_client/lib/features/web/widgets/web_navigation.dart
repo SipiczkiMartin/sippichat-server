@@ -24,10 +24,6 @@ class _WebNavigationState extends State<WebNavigation> {
     super.initState();
 
     controller.addListener(_update);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      controller.loadConversations();
-    });
   }
 
   void _update() {

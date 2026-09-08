@@ -40,7 +40,11 @@ class _WebRegisterPageState extends State<WebRegisterPage> {
     if (!mounted) return;
 
     if (success) {
-      // AuthBootstrap will rebuild and show WebShell.
+      if(!mounted) {
+        return;
+      }
+
+      Navigator.of(context).pop();
       return;
     }
 

@@ -19,6 +19,8 @@ class AuthController extends ChangeNotifier {
 
     try {
       authenticated = await authRepository.restoreSession();
+
+      debugPrint('AUTH INITIALIZE: authenticated=$authenticated');
     } catch (e, stackTrace) {
       debugPrint("Auth initialization error: $e");
       debugPrintStack(stackTrace: stackTrace);
@@ -28,6 +30,11 @@ class AuthController extends ChangeNotifier {
     }
 
     loading = false;
+
+    debugPrint(
+      'AUTH INITIALIZE COMPLETE: loading=$loading authenticated=$authenticated',
+    );
+
     notifyListeners();
   }
 
@@ -40,6 +47,9 @@ class AuthController extends ChangeNotifier {
       await authRepository.login(email, password);
 
       authenticated = true;
+
+      debugPrint('LOGIN: authenticated=$authenticated');
+
       return true;
     } catch (e, stackTrace) {
       debugPrint("Login error: $e");
@@ -51,6 +61,11 @@ class AuthController extends ChangeNotifier {
       return false;
     } finally {
       loading = false;
+
+      debugPrint(
+        'LOGIN COMPLETE: loading=$loading authenticated=$authenticated',
+      );
+
       notifyListeners();
     }
   }
@@ -66,6 +81,11 @@ class AuthController extends ChangeNotifier {
       );
 
       authenticated = true;
+
+      debugPrint('REGISTER: authenticated=$authenticated');
+
+      debugPrint('REGISTER: notifyListeners will happen in finally');
+
       return true;
     } catch (e, stackTrace) {
       debugPrint("Registration error: $e");
@@ -77,6 +97,11 @@ class AuthController extends ChangeNotifier {
       return false;
     } finally {
       loading = false;
+
+      debugPrint(
+        'REGISTER COMPLETE: loading=$loading authenticated=$authenticated',
+      );
+
       notifyListeners();
     }
   }
@@ -90,6 +115,8 @@ class AuthController extends ChangeNotifier {
     } finally {
       authenticated = false;
       error = null;
+
+      debugPrint('LOGOUT: authenticated=$authenticated');
 
       notifyListeners();
     }
