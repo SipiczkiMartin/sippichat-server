@@ -59,6 +59,11 @@ class ConversationController extends ChangeNotifier {
 
     debugPrint('CONVERSATION WS EVENT: $type');
 
+    if (type == 'conversation.created') {
+      _handleConversationCreated();
+      return;
+    }
+
     if (type != 'message.created') {
       return;
     }
@@ -71,6 +76,12 @@ class ConversationController extends ChangeNotifier {
     }
 
     _handleMessageCreated(payload);
+  }
+
+  void _handleConversationCreated() {
+    debugPrint('CONVERSATION WS: conversation.created');
+
+    loadConversations();
   }
 
   void _handleMessageCreated(Map<String, dynamic> payload) {
@@ -225,7 +236,7 @@ class ConversationController extends ChangeNotifier {
 
   int unreadCountFor(String conversationId) {
     final conversation = conversations.cast<Conversation?>().firstWhere(
-          (conversation) => conversation?.id == conversationId,
+      (conversation) => conversation?.id == conversationId,
       orElse: () => null,
     );
 
@@ -235,7 +246,6 @@ class ConversationController extends ChangeNotifier {
   bool hasUnreadMessages(String conversationId) {
     return unreadCountFor(conversationId) > 0;
   }
-
 
   // ---------------------------------------------------------------------------
   // Dispose
