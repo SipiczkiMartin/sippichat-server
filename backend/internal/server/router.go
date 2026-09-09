@@ -63,11 +63,11 @@ func NewRouter(pool *pgxpool.Pool, cfg config.Config) *chi.Mux {
 	userService := users.NewService(userRepo, authRepo, cfg.JWTSecret)
 	userHandler := users.NewHandler(userService)
 
+	hub := websocket.NewHub()
+
 	conversationRepo := conversations.NewRepository(pool)
 	conversationService := conversations.NewService(conversationRepo)
-	conversationHandler := conversations.NewHandler(conversationService)
-
-	hub := websocket.NewHub()
+	conversationHandler := conversations.NewHandler(conversationService, hub)
 
 	messageRepo := messages.NewRepository(pool)
 	messageService := messages.NewService(

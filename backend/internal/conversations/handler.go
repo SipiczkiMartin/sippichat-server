@@ -6,16 +6,23 @@ import (
 	"time"
 
 	"github.com/SipiczkiMartin/chat-app/internal/auth"
+	"github.com/SipiczkiMartin/chat-app/internal/events"
 	"github.com/google/uuid"
 )
 
-type Handler struct {
-	service *Service
+type Broadcaster interface {
+	SendToUser(userID uuid.UUID, event any)
 }
 
-func NewHandler(service *Service) *Handler {
+type Handler struct {
+	service *Service
+	hub     Broadcaster
+}
+
+func NewHandler(service *Service, hub Broadcaster) *Handler {
 	return &Handler{
 		service: service,
+		hub:     hub,
 	}
 }
 
@@ -73,6 +80,16 @@ func (h *Handler) CreateConversation(w http.ResponseWriter, r *http.Request) {
 		)
 		return
 	}
+
+	h.hub.SendToUser(
+		memberID,
+		events.Event{
+			Type: events.EventConversationCreated,
+			Payload: events.ConversationCreatedPayload{
+				ConversationID: conversation.ID,
+			},
+		},
+	)
 
 	response := toConversationResponse(conversation)
 

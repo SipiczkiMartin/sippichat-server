@@ -7,6 +7,8 @@ import (
 )
 
 const (
+	EventConversationCreated = "conversation.created"
+
 	EventMessageCreated = "message.created"
 	EventMessageSend    = "message.send"
 
@@ -77,4 +79,8 @@ type MessageCreatedAttachment struct {
 	ExternalURL string         `json:"external_url,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 	SortOrder   int            `json:"sort_order"`
+}
+
+type ConversationCreatedPayload struct {
+	ConversationID uuid.UUID `json:"conversation_id"`
 }
