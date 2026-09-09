@@ -13,6 +13,7 @@ class _WebRegisterPageState extends State<WebRegisterPage> {
   final _passwordController = TextEditingController();
 
   bool _loading = false;
+  bool _obscurePassword = true;
 
   Future<void> _register() async {
     final email = _emailController.text.trim();
@@ -40,10 +41,6 @@ class _WebRegisterPageState extends State<WebRegisterPage> {
     if (!mounted) return;
 
     if (success) {
-      if(!mounted) {
-        return;
-      }
-
       Navigator.of(context).pop();
       return;
     }
@@ -121,6 +118,12 @@ class _WebRegisterPageState extends State<WebRegisterPage> {
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) {
+                      if (!_loading) {
+                        FocusScope.of(context).nextFocus();
+                      }
+                    },
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: 'Email',
@@ -150,7 +153,13 @@ class _WebRegisterPageState extends State<WebRegisterPage> {
 
                   TextField(
                     controller: _passwordController,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (!_loading) {
+                        _register();
+                      }
+                    },
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       labelText: 'Password',
@@ -158,6 +167,22 @@ class _WebRegisterPageState extends State<WebRegisterPage> {
                       prefixIcon: const Icon(
                         Icons.lock_outline,
                         color: Colors.white54,
+                      ),
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword
+                            ? 'Show password'
+                            : 'Hide password',
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
+                          color: Colors.white54,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
                       ),
                       filled: true,
                       fillColor: background,

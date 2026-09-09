@@ -289,8 +289,9 @@ class _WebChatPageState extends State<WebChatPage> {
   @override
   Widget build(BuildContext context) {
     final participant = widget.conversation.participant;
-
     final name = participant?.displayName ?? participant?.username ?? 'Chat';
+
+    final isMobileWeb = MediaQuery.sizeOf(context).width < 700;
 
     return Theme(
       data: ThemeData.dark().copyWith(
@@ -334,25 +335,42 @@ class _WebChatPageState extends State<WebChatPage> {
       child: Scaffold(
         backgroundColor: background,
         body: SafeArea(
-          child: Container(
-            margin: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: panel,
-              border: Border.all(color: border, width: 2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              children: [
-                _buildChatHeader(name),
+          child: isMobileWeb
+              ? Column(
+                  children: [
+                    _buildChatHeader(name, isMobileWeb: true),
 
-                Expanded(child: _buildMessageList(controller.messages)),
+                    Expanded(child: _buildMessageList(controller.messages)),
 
-                if (controller.isOtherUserTyping) _buildTypingIndicator(),
+                    if (controller.isOtherUserTyping) _buildTypingIndicator(),
 
-                _buildInput(),
-              ],
-            ),
-          ),
+                    _buildInput(isMobileWeb: true),
+                  ],
+                )
+              : Container(
+                  margin: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: panel,
+                    border: Border.all(color: border, width: 2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildChatHeader(name),
+
+                      Expanded(
+                        child: _buildMessageList(
+                          controller.messages,
+                          isMobileWeb: true,
+                        ),
+                      ),
+
+                      if (controller.isOtherUserTyping) _buildTypingIndicator(),
+
+                      _buildInput(),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
@@ -362,15 +380,23 @@ class _WebChatPageState extends State<WebChatPage> {
   // Header
   // ===========================================================================
 
-  Widget _buildChatHeader(String name) {
+  Widget _buildChatHeader(String name, {bool isMobileWeb = false}) {
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.symmetric(horizontal: isMobileWeb ? 8 : 20),
       decoration: const BoxDecoration(
         border: Border(bottom: BorderSide(color: border, width: 2)),
       ),
       child: Row(
         children: [
+          // Mobile: back button
+          if (isMobileWeb)
+            IconButton(
+              tooltip: 'Back',
+              onPressed: widget.onClose,
+              icon: const Icon(Icons.arrow_back, color: textSecondary),
+            ),
+
           Container(
             width: 38,
             height: 38,
@@ -383,45 +409,45 @@ class _WebChatPageState extends State<WebChatPage> {
 
           const SizedBox(width: 12),
 
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: const TextStyle(
-                  color: textPrimary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: textPrimary,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 3),
+                const SizedBox(height: 3),
 
-              const Text(
-                'Conversation',
-                style: TextStyle(color: textMuted, fontSize: 12),
-              ),
-            ],
+                const Text(
+                  'Conversation',
+                  style: TextStyle(color: textMuted, fontSize: 12),
+                ),
+              ],
+            ),
           ),
 
-          const Spacer(),
-
-          Row(
-            children: [
-              IconButton(
-                tooltip: 'More',
-                onPressed: () {},
-                icon: const Icon(Icons.more_horiz, color: textSecondary),
-              ),
-
-              IconButton(
-                tooltip: 'Close conversation',
-                onPressed: widget.onClose,
-                icon: const Icon(Icons.close, color: textSecondary),
-              ),
-            ],
+          IconButton(
+            tooltip: 'More',
+            onPressed: () {},
+            icon: const Icon(Icons.more_horiz, color: textSecondary),
           ),
+
+          // Desktop: close button
+          if (!isMobileWeb)
+            IconButton(
+              tooltip: 'Close conversation',
+              onPressed: widget.onClose,
+              icon: const Icon(Icons.close, color: textSecondary),
+            ),
         ],
       ),
     );
@@ -431,7 +457,7 @@ class _WebChatPageState extends State<WebChatPage> {
   // Messages
   // ===========================================================================
 
-  Widget _buildMessageList(List<Message> messages) {
+  Widget _buildMessageList(List<Message> messages, {bool isMobileWeb = false}) {
     if (controller.loading) {
       return const Center(
         child: CircularProgressIndicator(color: textSecondary),
@@ -455,7 +481,10 @@ class _WebChatPageState extends State<WebChatPage> {
 
     return ListView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      padding: EdgeInsets.symmetric(
+        horizontal: isMobileWeb ? 12 : 28,
+        vertical: isMobileWeb ? 16 : 24,
+      ),
       itemCount: messages.length,
       itemBuilder: (context, index) {
         final message = messages[index];
@@ -499,12 +528,13 @@ class _WebChatPageState extends State<WebChatPage> {
   // Input
   // ===========================================================================
 
-  Widget _buildInput() {
+  Widget _buildInput({bool isMobileWeb = false}) {
     return Container(
       decoration: const BoxDecoration(
         border: Border(top: BorderSide(color: border, width: 2)),
       ),
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobileWeb ? 8 : 16),
+
       child: MessageInput(
         conversationId: widget.conversation.id,
         onSend: controller.sendMessage,

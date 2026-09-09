@@ -217,21 +217,19 @@ class _WebHeaderState extends State<WebHeader> {
   @override
   Widget build(BuildContext context) {
     final user = AppDependencies.authRepository.currentUser;
-
     final userName = user?.email ?? 'User';
 
+    final isMobileWeb = MediaQuery.sizeOf(context).width < 700;
+
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      height: isMobileWeb ? 56 : 64,
+      padding: EdgeInsets.symmetric(horizontal: isMobileWeb ? 16 : 20),
       decoration: const BoxDecoration(
         color: background,
         border: Border(bottom: BorderSide(color: border, width: 2)),
       ),
       child: Row(
         children: [
-          // ===================================================================
-          // Logo
-          // ===================================================================
           const Text(
             'SippiChat',
             style: TextStyle(
@@ -242,71 +240,68 @@ class _WebHeaderState extends State<WebHeader> {
             ),
           ),
 
-          const SizedBox(width: 32),
+          if (!isMobileWeb) ...[
+            const SizedBox(width: 32),
 
-          // ===================================================================
-          // Search
-          // ===================================================================
-          CompositedTransformTarget(
-            link: _searchLayerLink,
-            child: SizedBox(
-              width: 320,
-              height: 38,
-              child: TextField(
-                controller: _searchTextController,
-                style: const TextStyle(color: textPrimary, fontSize: 14),
-                cursorColor: textPrimary,
-                textInputAction: TextInputAction.search,
-                onChanged: _onSearchChanged,
-                decoration: InputDecoration(
-                  hintText: 'Search people...',
-                  hintStyle: const TextStyle(
-                    color: textSecondary,
-                    fontSize: 14,
-                  ),
-                  prefixIcon: const Icon(
-                    Icons.search,
-                    size: 20,
-                    color: iconColor,
-                  ),
-                  suffixIcon: searchController.query.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(
-                            Icons.close,
-                            size: 18,
-                            color: iconColor,
-                          ),
-                          onPressed: _clearSearch,
-                        )
-                      : null,
-                  filled: true,
-                  fillColor: inputBackground,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: border, width: 2),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: border, width: 2),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(
-                      color: Color(0xFF667085),
-                      width: 2,
+            CompositedTransformTarget(
+              link: _searchLayerLink,
+              child: SizedBox(
+                width: 320,
+                height: 38,
+                child: TextField(
+                  controller: _searchTextController,
+                  style: const TextStyle(color: textPrimary, fontSize: 14),
+                  cursorColor: textPrimary,
+                  textInputAction: TextInputAction.search,
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Search people...',
+                    hintStyle: const TextStyle(
+                      color: textSecondary,
+                      fontSize: 14,
                     ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 20,
+                      color: iconColor,
+                    ),
+                    suffixIcon: searchController.query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              size: 18,
+                              color: iconColor,
+                            ),
+                            onPressed: _clearSearch,
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: inputBackground,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: border, width: 2),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(color: border, width: 2),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF667085),
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                 ),
               ),
             ),
-          ),
 
-          const Spacer(),
+            const Spacer(),
+          ] else
+            const Spacer(),
 
-          // ===================================================================
-          // Account
-          // ===================================================================
           PopupMenuButton<String>(
             offset: const Offset(0, 48),
             color: const Color(0xFF20242A),
@@ -342,24 +337,26 @@ class _WebHeaderState extends State<WebHeader> {
                     child: Icon(Icons.person, size: 19, color: iconColor),
                   ),
 
-                  const SizedBox(width: 9),
+                  if (!isMobileWeb) ...[
+                    const SizedBox(width: 9),
 
-                  Text(
-                    userName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: textPrimary,
+                    Text(
+                      userName,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: textPrimary,
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(width: 4),
+                    const SizedBox(width: 4),
 
-                  const Icon(
-                    Icons.keyboard_arrow_down,
-                    size: 19,
-                    color: iconColor,
-                  ),
+                    const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 19,
+                      color: iconColor,
+                    ),
+                  ],
                 ],
               ),
             ),

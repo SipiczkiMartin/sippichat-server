@@ -17,59 +17,30 @@ class _WebShellState extends State<WebShell> {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final isMobileWeb = width < 700;
+
     return Scaffold(
       backgroundColor: const Color(0xFF0D0F11),
       body: SafeArea(
         child: Stack(
           clipBehavior: Clip.none,
           children: [
-            // =================================================================
-            // Main application
-            // =================================================================
             Column(
               children: [
-                const SizedBox(height: 64),
+                SizedBox(height: isMobileWeb ? 56 : 64),
 
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        WebNavigation(
-                          selectedConversationId: selectedConversation?.id,
-                          onConversationSelected: (conversation) {
-                            setState(() {
-                              selectedConversation = conversation;
-                            });
-                          },
-                        ),
-
-                        const SizedBox(width: 10),
-
-                        Expanded(
-                          child: WebWorkspace(
-                            selectedConversation: selectedConversation,
-                            onClose: (){
-                              setState(() {
-                                selectedConversation = null;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+                    padding: EdgeInsets.all(isMobileWeb ? 0 : 10),
+                    child: isMobileWeb
+                        ? _buildMobileLayout()
+                        : _buildDesktopLayout(),
                   ),
                 ),
               ],
             ),
 
-            // =================================================================
-            // Header
-            //
-            // This is LAST in the Stack, therefore it paints ABOVE the
-            // navigation/workspace.
-            // =================================================================
             Positioned(
               top: 0,
               left: 0,
@@ -85,6 +56,57 @@ class _WebShellState extends State<WebShell> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        WebNavigation(
+          selectedConversationId: selectedConversation?.id,
+          onConversationSelected: (conversation) {
+            setState(() {
+              selectedConversation = conversation;
+            });
+          },
+        ),
+
+        const SizedBox(width: 10),
+
+        Expanded(
+          child: WebWorkspace(
+            selectedConversation: selectedConversation,
+            onClose: () {
+              setState(() {
+                selectedConversation = null;
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    if (selectedConversation == null) {
+      return WebNavigation(
+        selectedConversationId: null,
+        onConversationSelected: (conversation) {
+          setState(() {
+            selectedConversation = conversation;
+          });
+        },
+      );
+    }
+
+    return WebWorkspace(
+      selectedConversation: selectedConversation,
+      onClose: () {
+        setState(() {
+          selectedConversation = null;
+        });
+      },
     );
   }
 }

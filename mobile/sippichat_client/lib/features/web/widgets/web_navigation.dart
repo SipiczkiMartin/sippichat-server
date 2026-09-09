@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:sippichat_client/app/app_dependencies.dart';
 import 'package:sippichat_client/features/conversations/models/conversation.dart';
 
+import '../../users/models/user_search_result.dart';
+
 class WebNavigation extends StatefulWidget {
   final String? selectedConversationId;
   final ValueChanged<Conversation> onConversationSelected;
@@ -18,12 +20,20 @@ class WebNavigation extends StatefulWidget {
 
 class _WebNavigationState extends State<WebNavigation> {
   final controller = AppDependencies.conversationController;
+  final searchController = AppDependencies.userSearchController;
+
+  final TextEditingController _searchTextController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
 
     controller.addListener(_update);
+    searchController.addListener(_update);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await controller.loadConversations();
+    });
   }
 
   void _update() {
@@ -35,11 +45,132 @@ class _WebNavigationState extends State<WebNavigation> {
   @override
   void dispose() {
     controller.removeListener(_update);
+    searchController.removeListener(_update);
+    _searchTextController.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String value) {
+    final query = value.trim();
+
+    searchController.search(query);
+  }
+
+  void _clearSearch() {
+    _searchTextController.clear();
+    searchController.clear();
+  }
+
+  Future<void> _openSearchResult(UserSearchResult user) async {
+    final conversation = await controller.createConversation(user.id);
+
+    if (!mounted || conversation == null) {
+      return;
+    }
+
+    _clearSearch();
+
+    widget.onConversationSelected(conversation);
   }
 
   @override
   Widget build(BuildContext context) {
+    final isMobileWeb = MediaQuery.sizeOf(context).width < 700;
+
+    if (isMobileWeb) {
+      return Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(color: Color(0xFF181B1F)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(18, 12, 18, 10),
+              child: Text(
+                'CONVERSATIONS',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: Color(0xFF8B929B),
+                ),
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: SizedBox(
+                height: 40,
+                child: TextField(
+                  controller: _searchTextController,
+                  style: const TextStyle(
+                    color: Color(0xFFF8FAFC),
+                    fontSize: 14,
+                  ),
+                  cursorColor: const Color(0xFFF8FAFC),
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Search people...',
+                    hintStyle: const TextStyle(
+                      color: Color(0xFF8B929B),
+                      fontSize: 14,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 19,
+                      color: Color(0xFFAAB3BE),
+                    ),
+                    suffixIcon: searchController.query.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              size: 18,
+                              color: Color(0xFFAAB3BE),
+                            ),
+                            onPressed: _clearSearch,
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: const Color(0xFF0D0F11),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF30353D),
+                        width: 2,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF30353D),
+                        width: 2,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF667085),
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            Expanded(
+              child: searchController.query.trim().length >= 2
+                  ? _buildMobileSearchResults()
+                  : _buildConversations(),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: 250,
       decoration: BoxDecoration(
@@ -108,6 +239,101 @@ class _WebNavigationState extends State<WebNavigation> {
           Expanded(child: _buildConversations()),
         ],
       ),
+    );
+  }
+
+  Widget _buildMobileSearchResults() {
+    if (searchController.loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Color(0xFF8FB8FF)),
+      );
+    }
+
+    final results = searchController.results;
+
+    if (results.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Text(
+          'No users found',
+          style: TextStyle(color: Color(0xFF8B929B), fontSize: 13),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 4),
+      itemCount: results.length,
+      itemBuilder: (context, index) {
+        final user = results[index];
+
+        return InkWell(
+          onTap: () => _openSearchResult(user),
+          child: Container(
+            height: 56,
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            decoration: BoxDecoration(borderRadius: BorderRadius.circular(6)),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 18,
+                  backgroundColor: const Color(0xFF292D33),
+                  backgroundImage: user.avatarUrl != null
+                      ? NetworkImage(user.avatarUrl!)
+                      : null,
+                  child: user.avatarUrl == null
+                      ? const Icon(
+                          Icons.person,
+                          size: 19,
+                          color: Color(0xFFAAB3BE),
+                        )
+                      : null,
+                ),
+
+                const SizedBox(width: 10),
+
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFFF8FAFC),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+
+                      const SizedBox(height: 2),
+
+                      Text(
+                        '@${user.username}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Color(0xFF8B929B),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 13,
+                  color: Color(0xFFAAB3BE),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
